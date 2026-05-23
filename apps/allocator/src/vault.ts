@@ -32,5 +32,7 @@ export async function registryRecord(agentId: AgentId, won: boolean, pnlUsdc6: b
 
 export async function getTotalAssetsUsdc(): Promise<number> {
   const assets: bigint = await vault.totalAssets();
-  return Number(assets) / 1e6;
+  const whole = Number(assets / BigInt(1_000_000));
+  const frac = Number(assets % BigInt(1_000_000)) / 1_000_000;
+  return whole + frac;
 }

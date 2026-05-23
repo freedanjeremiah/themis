@@ -10,8 +10,13 @@ export async function runCycle(): Promise<void> {
   cycleId++;
   const now = Date.now() / 1000;
 
-  const proposals = state.getRecentProposals().filter(p => {
-    return now - p.timestamp <= 90;
+  const allProposals = state.getRecentProposals();
+  const proposals = allProposals.filter(p => {
+    if (typeof p.timestamp !== "number" || now - p.timestamp > 90) {
+      console.warn(`[allocator] dropped stale/invalid proposal from ${p.agentId}`);
+      return false;
+    }
+    return true;
   });
 
   if (proposals.length === 0) {
