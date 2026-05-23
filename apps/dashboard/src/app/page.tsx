@@ -4,7 +4,7 @@ import { useIndexerSocket } from "../hooks/useIndexerSocket";
 import { TvlBar } from "../components/TvlBar";
 import { AgentLeaderboard } from "../components/AgentLeaderboard";
 import { TracesFeed } from "../components/TracesFeed";
-import { DepositPanel } from "../components/DepositPanel";
+import { CircleKitDeposit } from "../components/CircleKitDeposit";
 import { WsMessage } from "@themis/shared";
 
 type AgentRow = {
@@ -115,7 +115,7 @@ export default function Home() {
           <TracesFeed traces={traces} />
         </div>
         <div>
-          <DepositPanel liquidReservePct={liquidReservePct} />
+          <CircleKitDeposit liquidReservePct={liquidReservePct} />
         </div>
       </div>
     </main>
