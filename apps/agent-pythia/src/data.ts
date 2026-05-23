@@ -1,11 +1,19 @@
 import axios from "axios";
 import * as dotenv from "dotenv";
 dotenv.config({ path: "../../.env" });
+import { ethers } from "ethers";
+import { payForDataCall } from "./gateway.js";
+
+// Create a Pythia wallet for signing nanopayments
+const pythiaWallet = process.env.PRIVATE_KEY_PYTHIA
+  ? new ethers.Wallet(process.env.PRIVATE_KEY_PYTHIA)
+  : null;
 
 export type NewsItem = { title: string; source: string; publishedAt: string };
 
 export async function fetchNewsHeadlines(): Promise<NewsItem[]> {
   try {
+    if (pythiaWallet) await payForDataCall(pythiaWallet, "twitter.com/crypto-headlines");
     const resp = await axios.get(
       "https://api.twitter.com/2/tweets/search/recent?query=bitcoin+OR+ethereum+crypto+lang:en&max_results=10&tweet.fields=created_at",
       { headers: { Authorization: `Bearer ${process.env.TWITTER_BEARER_TOKEN}` } }
@@ -18,6 +26,7 @@ export async function fetchNewsHeadlines(): Promise<NewsItem[]> {
   } catch {
     // Fallback: CoinDesk RSS
     try {
+      if (pythiaWallet) await payForDataCall(pythiaWallet, "coindesk.com/rss", 500); // $0.0005
       const rss = await axios.get("https://www.coindesk.com/arc/outboundfeeds/rss/", {
         headers: { "User-Agent": "Themis/1.0" }
       });
