@@ -2,6 +2,7 @@ import { fetchFundingRates } from "./data.js";
 import { reason } from "./reason.js";
 import { anchorTrace } from "./anchor.js";
 import { submitProposal } from "./propose.js";
+import { executeHermesTrade } from "./execute.js";
 
 const CYCLE_MS = 60_000;
 
@@ -24,6 +25,10 @@ async function cycle(): Promise<void> {
 
     await submitProposal(clean);
     console.log(`[hermes] submitted: ${clean.tradeIdea} (conf=${clean.confidence})`);
+
+    await executeHermesTrade(clean, clean.requestedSizeUsd).catch(err =>
+      console.error("[hermes] Execute failed (non-fatal):", err)
+    );
   } catch (err) {
     console.error("[hermes] cycle error:", err);
   }
