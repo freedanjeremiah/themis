@@ -46,6 +46,7 @@ export async function fetchNewsHeadlines(): Promise<NewsItem[]> {
       }));
     } catch {
       // Last resort: return a generic neutral headline
+      console.warn("[pythia] All data sources failed — using neutral fallback headline. Claude reasoning will be low-quality this cycle.");
       return [{ title: "Crypto markets steady, no major moves", source: "fallback", publishedAt: new Date().toISOString() }];
     }
   }
