@@ -83,12 +83,13 @@ function addressToBytes32(address: string): string {
 
 /**
  * Execute a winning Hermes proposal by bridging USDC to Hyperliquid via CCTP.
+ * Returns position info when a real trade fills, null otherwise.
  * No-op when ENABLE_REAL_TRADES=false (logs intent only).
  */
 export async function executeHermesTrade(
   proposal: AgentProposal,
   allocatedUsd: number
-): Promise<void> {
+): Promise<{ fillPrice: number | null; coin: string; sizeInCoins: number; szDecimals: number; isBuy: boolean } | null> {
   const amountUsdc6 = BigInt(Math.floor(allocatedUsd * 1_000_000));
 
   if (!ENABLE_REAL_TRADES) {
@@ -96,12 +97,12 @@ export async function executeHermesTrade(
       `[hermes] CCTP bridge skipped (ENABLE_REAL_TRADES=false): would burn ${allocatedUsd} USDC on Arc` +
       ` → mint on Hyperliquid (domain ${HYPERLIQUID_CCTP_DOMAIN}) for trade: ${proposal.tradeIdea}`
     );
-    return;
+    return null;
   }
 
   if (!CCTP_TOKEN_MESSENGER) {
     console.warn("[hermes] CCTP_TOKEN_MESSENGER not set — skipping CCTP bridge");
-    return;
+    return null;
   }
 
   const provider = new ethers.JsonRpcProvider(process.env.ARC_RPC_URL!);
@@ -131,7 +132,7 @@ export async function executeHermesTrade(
   );
   if (!messageSentLog) {
     console.warn("[hermes] Could not find MessageSent log — attestation skipped");
-    return;
+    return null;
   }
 
   // The message is in the log data (ABI-encoded bytes)
@@ -140,14 +141,14 @@ export async function executeHermesTrade(
 
   console.log(`[hermes] Polling Iris for attestation (hash: ${messageHash.slice(0, 12)}…)`);
   const attestation = await pollIrisAttestation(messageHash);
-  if (!attestation) return;
+  if (!attestation) return null;
 
   // Call receiveMessage on destination (Hyperliquid)
   const destRpc = process.env.DEST_RPC_URL;
   const destTransmitter = process.env.MESSAGE_TRANSMITTER_DEST;
   if (!destRpc || !destTransmitter) {
     console.warn("[hermes] DEST_RPC_URL or MESSAGE_TRANSMITTER_DEST not set — mint skipped");
-    return;
+    return null;
   }
 
   const destProvider = new ethers.JsonRpcProvider(destRpc);
@@ -159,7 +160,7 @@ export async function executeHermesTrade(
 
   // Place perp order on Hyperliquid (non-fatal — bridge already completed)
   try {
-    const { orderId, fillPrice } = await placeHlOrder(
+    const { orderId, fillPrice, coin, sizeInCoins, szDecimals, isBuy } = await placeHlOrder(
       process.env.PRIVATE_KEY_HERMES!,
       proposal,
       allocatedUsd,
@@ -167,12 +168,15 @@ export async function executeHermesTrade(
     );
     if (fillPrice !== null) {
       console.log(`[hermes] HL order filled: avgPx=${fillPrice}`);
+      return { fillPrice, coin, sizeInCoins, szDecimals, isBuy };
     } else if (orderId !== null) {
       console.log(`[hermes] HL order resting on book: oid=${orderId}`);
     } else {
       console.warn("[hermes] HL order placement returned no fill/resting — check logs above");
     }
+    return null;
   } catch (err) {
     console.warn("[hermes] HL order placement failed (non-fatal):", err);
+    return null;
   }
 }

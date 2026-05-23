@@ -84,10 +84,15 @@ function addressToBytes32(address: string): string {
   return "0x" + address.slice(2).toLowerCase().padStart(64, "0");
 }
 
+/**
+ * Execute a winning Pythia proposal by bridging USDC to Hyperliquid via CCTP.
+ * Returns position info when a real trade fills, null otherwise.
+ * No-op when ENABLE_REAL_TRADES=false (logs intent only).
+ */
 export async function executePythiaTrade(
   proposal: AgentProposal,
   allocatedUsd: number
-): Promise<void> {
+): Promise<{ fillPrice: number | null; coin: string; sizeInCoins: number; szDecimals: number; isBuy: boolean } | null> {
   const amountUsdc6 = BigInt(Math.floor(allocatedUsd * 1_000_000));
 
   if (!ENABLE_REAL_TRADES) {
@@ -95,12 +100,12 @@ export async function executePythiaTrade(
       `[pythia] CCTP bridge skipped (ENABLE_REAL_TRADES=false): would burn ${allocatedUsd} USDC on Arc` +
       ` → mint on Hyperliquid (domain ${HYPERLIQUID_CCTP_DOMAIN}) for: ${proposal.tradeIdea}`
     );
-    return;
+    return null;
   }
 
   if (!CCTP_TOKEN_MESSENGER) {
     console.warn("[pythia] CCTP_TOKEN_MESSENGER not set — skipping CCTP bridge");
-    return;
+    return null;
   }
 
   const provider = new ethers.JsonRpcProvider(process.env.ARC_RPC_URL!);
@@ -130,7 +135,7 @@ export async function executePythiaTrade(
   );
   if (!messageSentLog) {
     console.warn("[pythia] Could not find MessageSent log — attestation skipped");
-    return;
+    return null;
   }
 
   // The message is in the log data (ABI-encoded bytes)
@@ -139,14 +144,14 @@ export async function executePythiaTrade(
 
   console.log(`[pythia] Polling Iris for attestation (hash: ${messageHash.slice(0, 12)}…)`);
   const attestation = await pollIrisAttestation(messageHash);
-  if (!attestation) return;
+  if (!attestation) return null;
 
   // Step 4: Call receiveMessage on destination (Hyperliquid)
   const destRpc = process.env.DEST_RPC_URL;
   const destTransmitter = process.env.MESSAGE_TRANSMITTER_DEST;
   if (!destRpc || !destTransmitter) {
     console.warn("[pythia] DEST_RPC_URL or MESSAGE_TRANSMITTER_DEST not set — mint skipped");
-    return;
+    return null;
   }
 
   const destProvider = new ethers.JsonRpcProvider(destRpc);
@@ -158,7 +163,7 @@ export async function executePythiaTrade(
 
   // Step 5: Place perp order on Hyperliquid (non-fatal — bridge already completed)
   try {
-    const { orderId, fillPrice } = await placeHlOrder(
+    const { orderId, fillPrice, coin, sizeInCoins, szDecimals, isBuy } = await placeHlOrder(
       process.env.PRIVATE_KEY_PYTHIA!,
       proposal,
       allocatedUsd,
@@ -166,12 +171,15 @@ export async function executePythiaTrade(
     );
     if (fillPrice !== null) {
       console.log(`[pythia] HL order filled: avgPx=${fillPrice}`);
+      return { fillPrice, coin, sizeInCoins, szDecimals, isBuy };
     } else if (orderId !== null) {
       console.log(`[pythia] HL order resting on book: oid=${orderId}`);
     } else {
       console.warn("[pythia] HL order placement returned no fill/resting — check logs above");
     }
+    return null;
   } catch (err) {
     console.warn("[pythia] HL order placement failed (non-fatal):", err);
+    return null;
   }
 }
