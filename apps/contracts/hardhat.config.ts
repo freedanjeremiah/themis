@@ -8,6 +8,7 @@ const config: HardhatUserConfig = {
   networks: {
     arc: {
       url: process.env.ARC_RPC_URL ?? "",
+      chainId: 5042002,
       accounts: process.env.PRIVATE_KEY_ALLOCATOR
         ? [process.env.PRIVATE_KEY_ALLOCATOR]
         : [],
