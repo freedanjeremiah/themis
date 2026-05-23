@@ -18,6 +18,14 @@ app.post("/proposals", (req, res) => {
   ) {
     return res.status(400).json({ error: "invalid proposal" });
   }
+  const VALID_ACTIONS = ["long", "short", "rotate", "hold"];
+  const VALID_VENUES  = ["hyperliquid", "arc-dex", "usyc", "aave"];
+  if (!VALID_ACTIONS.includes(p.action)) {
+    return res.status(400).json({ error: `invalid action: ${p.action}` });
+  }
+  if (!VALID_VENUES.includes(p.venue)) {
+    return res.status(400).json({ error: `invalid venue: ${p.venue}` });
+  }
   state.addProposal(p);
   console.log(`[allocator] received proposal from ${p.agentId}: ${p.tradeIdea}`);
   res.json({ ok: true });

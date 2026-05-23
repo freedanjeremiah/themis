@@ -11,10 +11,10 @@ import { VAULT_ABI, ERC20_ABI, USDC_ADDRESS } from "../lib/abis";
 import { wagmiConfig } from "../lib/wagmi";
 import { WalletConnect } from "./WalletConnect";
 
-const VAULT_ADDRESS = (
-  process.env.NEXT_PUBLIC_VAULT_ADDRESS ??
-  "0x0000000000000000000000000000000000000000"
-) as `0x${string}`;
+const VAULT_ADDRESS = (process.env.NEXT_PUBLIC_VAULT_ADDRESS ?? "") as `0x${string}`;
+const vaultConfigured =
+  (VAULT_ADDRESS as string) !== "" &&
+  (VAULT_ADDRESS as string) !== "0x0000000000000000000000000000000000000000";
 const WALLET_CAP_USDC = 100; // $100
 
 export function DepositPanel({ liquidReservePct }: { liquidReservePct: number }) {
@@ -137,6 +137,10 @@ export function DepositPanel({ liquidReservePct }: { liquidReservePct: number })
       {!isConnected ? (
         <div className="text-center text-gray-500 text-sm py-6 border border-dashed border-gray-700 rounded">
           Connect wallet to deposit USDC
+        </div>
+      ) : !vaultConfigured ? (
+        <div className="text-center text-red-500 text-sm py-4">
+          Vault not deployed — set NEXT_PUBLIC_VAULT_ADDRESS
         </div>
       ) : (
         <div className="space-y-3">

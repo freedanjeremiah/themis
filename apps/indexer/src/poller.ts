@@ -35,7 +35,11 @@ export function startPolling(): void {
   });
 
   vault.on("Allocated", (agent: string, amount: bigint, cycleId: bigint, event: ethers.EventLog) => {
-    const agentId = ADDRESS_TO_ID[agent.toLowerCase()] ?? "unknown";
+    const agentId = ADDRESS_TO_ID[agent.toLowerCase()];
+    if (!agentId) {
+      console.warn(`[indexer] Unknown agent address: ${agent} — skipping event`);
+      return;
+    }
     insertAllocation.run(
       agentId,
       Number(amount),
@@ -50,7 +54,11 @@ export function startPolling(): void {
   });
 
   vault.on("Settled", (agent: string, pnl: bigint, totalAssets: bigint, event: ethers.EventLog) => {
-    const agentId = ADDRESS_TO_ID[agent.toLowerCase()] ?? "unknown";
+    const agentId = ADDRESS_TO_ID[agent.toLowerCase()];
+    if (!agentId) {
+      console.warn(`[indexer] Unknown agent address: ${agent} — skipping event`);
+      return;
+    }
     insertSettlement.run(
       agentId,
       Number(pnl),

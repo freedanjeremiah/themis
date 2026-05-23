@@ -34,5 +34,22 @@ export async function reason(data: YieldData[]): Promise<RawProposal> {
     messages: [{ role: "user", content: `Available yields:\n${JSON.stringify(data, null, 2)}` }],
   });
   const text = msg.content[0].type === "text" ? msg.content[0].text : "";
-  return JSON.parse(text);
+  let parsed: RawProposal;
+  try {
+    parsed = JSON.parse(text) as RawProposal;
+  } catch {
+    // Retry once with correction prompt
+    const retry = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      messages: [
+        { role: "user", content: `Current market data:\n${JSON.stringify(data, null, 2)}\n\nProduce a trade proposal.` },
+        { role: "assistant", content: text },
+        { role: "user", content: "Your previous output was not valid JSON — output only valid JSON matching the schema, no other text." },
+      ],
+    });
+    const retryText = retry.content[0].type === "text" ? retry.content[0].text : "";
+    parsed = JSON.parse(retryText) as RawProposal;
+  }
+  return parsed;
 }
