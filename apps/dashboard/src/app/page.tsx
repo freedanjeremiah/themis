@@ -13,6 +13,9 @@ type AgentRow = {
   totalUsdc: number;
   pnlHistory: { timestamp: number; pnl: number }[];
   sidelined: boolean;
+  tradesCompleted: number;
+  sharpe: number;
+  maxDrawdown: number;
 };
 
 type TraceItem = {
@@ -26,9 +29,9 @@ type TraceItem = {
 };
 
 const INITIAL_AGENTS: AgentRow[] = [
-  { agentId: "hermes", allocationUsdc: 0, totalUsdc: 0, pnlHistory: [], sidelined: false },
-  { agentId: "pythia",  allocationUsdc: 0, totalUsdc: 0, pnlHistory: [], sidelined: false },
-  { agentId: "demeter", allocationUsdc: 0, totalUsdc: 0, pnlHistory: [], sidelined: false },
+  { agentId: "hermes", allocationUsdc: 0, totalUsdc: 0, pnlHistory: [], sidelined: false, tradesCompleted: 0, sharpe: 0, maxDrawdown: 0 },
+  { agentId: "pythia",  allocationUsdc: 0, totalUsdc: 0, pnlHistory: [], sidelined: false, tradesCompleted: 0, sharpe: 0, maxDrawdown: 0 },
+  { agentId: "demeter", allocationUsdc: 0, totalUsdc: 0, pnlHistory: [], sidelined: false, tradesCompleted: 0, sharpe: 0, maxDrawdown: 0 },
 ];
 
 export default function Home() {
@@ -77,14 +80,17 @@ export default function Home() {
       .then((data: unknown) => {
         if (!Array.isArray(data)) return;
         setAgents(prev => prev.map(agent => {
-          const live = (data as Array<{agentId: string; allocationUsdc?: number; sidelined?: boolean; pnlHistory?: Array<{timestamp: number; pnl: number}>}>)
+          const live = (data as Array<{agentId: string; currentAllocationUsdc?: number; sidelined?: boolean; pnlHistory?: Array<{timestamp: number; pnl: number}>; tradesCompleted?: number; sharpe?: number; maxDrawdown?: number}>)
             .find(a => a.agentId === agent.agentId);
           if (!live) return agent;
           return {
             ...agent,
-            allocationUsdc: live.allocationUsdc ?? agent.allocationUsdc,
+            allocationUsdc: live.currentAllocationUsdc ?? agent.allocationUsdc,
             sidelined: live.sidelined ?? agent.sidelined,
             pnlHistory: live.pnlHistory ?? agent.pnlHistory,
+            tradesCompleted: live.tradesCompleted ?? agent.tradesCompleted,
+            sharpe: live.sharpe ?? agent.sharpe,
+            maxDrawdown: live.maxDrawdown ?? agent.maxDrawdown,
           };
         }));
       })

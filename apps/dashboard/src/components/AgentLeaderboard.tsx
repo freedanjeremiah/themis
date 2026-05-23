@@ -7,6 +7,9 @@ type AgentRow = {
   totalUsdc: number;
   pnlHistory: { timestamp: number; pnl: number }[];
   sidelined: boolean;
+  tradesCompleted: number;
+  sharpe: number;
+  maxDrawdown: number;
 };
 
 const AGENT_COLORS: Record<string, string> = {
@@ -41,12 +44,36 @@ export function AgentLeaderboard({ agents }: { agents: AgentRow[] }) {
               <span className="font-semibold" style={{ color }}>
                 {AGENT_LABELS[agent.agentId] ?? agent.agentId}
               </span>
-              {agent.sidelined && (
-                <span className="text-xs text-red-400 border border-red-600 rounded px-2 py-0.5">
-                  Sidelined
+              <div className="flex items-center gap-2">
+                {agent.sidelined && (
+                  <span className="text-xs text-red-400 border border-red-600 rounded px-2 py-0.5">
+                    Sidelined
+                  </span>
+                )}
+                <span className="text-xl font-mono font-bold text-white">{pct}%</span>
+              </div>
+            </div>
+            <div className="flex gap-4 text-xs text-gray-400 mb-2">
+              <span>
+                Sharpe:{" "}
+                {agent.tradesCompleted < 10 ? (
+                  <span className="text-yellow-400 border border-yellow-600 rounded px-1 py-0.5">
+                    Bootstrap
+                  </span>
+                ) : (
+                  <span className="text-white font-mono">{agent.sharpe.toFixed(2)}</span>
+                )}
+              </span>
+              <span>
+                Max DD:{" "}
+                <span className="text-white font-mono">
+                  {(agent.maxDrawdown * 100).toFixed(1)}%
                 </span>
-              )}
-              <span className="text-xl font-mono font-bold text-white">{pct}%</span>
+              </span>
+              <span>
+                Trades:{" "}
+                <span className="text-white font-mono">{agent.tradesCompleted}</span>
+              </span>
             </div>
             <div className="h-12">
               <ResponsiveContainer width="100%" height="100%">

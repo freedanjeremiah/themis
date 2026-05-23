@@ -8,8 +8,33 @@ import {
   getDepositCount,
   getAgentAllocations,
   getAgentPnlHistory,
+  getAgentSettlementCount,
 } from "./db.js";
 import { WsMessage } from "@themis/shared";
+
+function computeSharpe(pnls: number[]): number {
+  if (pnls.length < 2) return 0;
+  const mean = pnls.reduce((s, v) => s + v, 0) / pnls.length;
+  const variance = pnls.reduce((s, v) => s + (v - mean) ** 2, 0) / pnls.length;
+  const std = Math.sqrt(variance);
+  if (std === 0) return 0;
+  return Math.max(-2, Math.min(2, mean / std));
+}
+
+function computeMaxDrawdown(pnls: number[]): number {
+  let cumPnl = 0;
+  let peak = 0;
+  let maxDD = 0;
+  for (const pnl of pnls) {
+    cumPnl += pnl;
+    if (cumPnl > peak) peak = cumPnl;
+    if (peak > 0) {
+      const dd = (peak - cumPnl) / peak;
+      if (dd > maxDD) maxDD = dd;
+    }
+  }
+  return maxDD;
+}
 
 export const app = express();
 app.use(express.json());
@@ -44,8 +69,19 @@ app.get("/agents", (_req, res) => {
   const allocations = getAgentAllocations.all() as { agent_id: string; total: number }[];
   const agents = ["hermes", "pythia", "demeter"].map(id => {
     const alloc = allocations.find(a => a.agent_id === id);
-    const pnlHistory = getAgentPnlHistory.all(id);
-    return { agentId: id, currentAllocationUsdc: alloc?.total ?? 0, pnlHistory };
+    const pnlHistory = getAgentPnlHistory.all(id) as { pnl: number; timestamp: number }[];
+    const { count } = getAgentSettlementCount.get(id) as { count: number };
+    const pnls = pnlHistory.map(r => r.pnl);
+    const sharpe = computeSharpe(pnls);
+    const maxDrawdown = computeMaxDrawdown(pnls);
+    return {
+      agentId: id,
+      currentAllocationUsdc: alloc?.total ?? 0,
+      tradesCompleted: count,
+      sharpe,
+      maxDrawdown,
+      pnlHistory,
+    };
   });
   res.json(agents);
 });

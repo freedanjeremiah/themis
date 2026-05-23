@@ -71,5 +71,8 @@ export const getAgentAllocations = db.prepare(
 export const getAgentPnlHistory = db.prepare(
   `SELECT pnl_usdc as pnl, block_time as timestamp FROM settlements WHERE agent_id=? ORDER BY block_time DESC LIMIT 50`
 );
+export const getAgentSettlementCount = db.prepare(
+  `SELECT COUNT(*) as count FROM settlements WHERE agent_id=?`
+);
 
 export default db;
