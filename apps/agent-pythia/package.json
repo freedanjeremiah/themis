@@ -1,0 +1,19 @@
+{
+  "name": "@themis/agent-pythia",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@themis/shared": "workspace:*",
+    "@anthropic-ai/sdk": "^0.27.0",
+    "axios": "^1.6.0",
+    "ethers": "^6.11.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}
