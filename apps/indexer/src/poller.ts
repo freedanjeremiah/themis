@@ -25,7 +25,7 @@ export function startPolling(): void {
       Number(amount),
       Number(shares),
       event.transactionHash,
-      event.blockNumber
+      Math.floor(Date.now() / 1000)
     );
     broadcast({
       event: "deposit",
@@ -41,7 +41,7 @@ export function startPolling(): void {
       Number(amount),
       Number(cycleId),
       event.transactionHash,
-      event.blockNumber
+      Math.floor(Date.now() / 1000)
     );
     broadcast({
       event: "allocation",
@@ -56,7 +56,7 @@ export function startPolling(): void {
       Number(pnl),
       Number(totalAssets),
       event.transactionHash,
-      event.blockNumber
+      Math.floor(Date.now() / 1000)
     );
     broadcast({
       event: "settlement",
