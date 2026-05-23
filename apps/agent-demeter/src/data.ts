@@ -1,6 +1,12 @@
 import { ethers } from "ethers";
 import * as dotenv from "dotenv";
+import { readFileSync, writeFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 dotenv.config({ path: "../../.env" });
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const CACHE_FILE = join(__dirname, "../demeter-cache.json");
 
 export type YieldData = {
   venue: "usyc" | "aave";
@@ -20,8 +26,28 @@ const AAVE_POOL_ABI = [
   "function getReserveData(address asset) view returns (uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt)",
 ];
 
+// File-persisted cache for USYC share price — survives process restarts
+function loadCache(): { assets: string; blockTime: number } | null {
+  try {
+    return JSON.parse(readFileSync(CACHE_FILE, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function saveCache(assets: bigint, blockTime: number): void {
+  try {
+    writeFileSync(CACHE_FILE, JSON.stringify({ assets: assets.toString(), blockTime }), "utf8");
+  } catch {
+    // non-fatal — in-memory fallback still works within the session
+  }
+}
+
 // Module-level cache for USYC share price (used to estimate APY across cycles)
-let usycCache: { assets: bigint; blockTime: number } | null = null;
+const _raw = loadCache();
+let usycCache: { assets: bigint; blockTime: number } | null = _raw
+  ? { assets: BigInt(_raw.assets), blockTime: _raw.blockTime }
+  : null;
 const RAY = BigInt("1000000000000000000000000000"); // 1e27
 const SECONDS_PER_YEAR = 31_536_000n;
 const BPS = 10_000n;
@@ -34,6 +60,7 @@ async function fetchUsycApy(provider: ethers.Provider, usycAddress: string): Pro
 
   if (usycCache === null) {
     usycCache = { assets, blockTime: now };
+    saveCache(assets, now);
     return 520; // bootstrap — return last known USYC yield (≈5.2%)
   }
 
@@ -49,6 +76,7 @@ async function fetchUsycApy(provider: ethers.Provider, usycAddress: string): Pro
   // Annualized APY in BPS = (gain / prev) / elapsed * seconds_per_year * 10000
   const apyBps = Number((gain * BigInt(SECONDS_PER_YEAR) * BPS) / (usycCache.assets * BigInt(elapsed)));
   usycCache = { assets, blockTime: now };
+  saveCache(assets, now);
   return Math.max(0, Math.min(2000, apyBps)); // clamp 0–20%
 }
 
