@@ -1,7 +1,7 @@
 import { fetchFundingRates } from "./data.js";
 import { reason } from "./reason.js";
 import { anchorTrace } from "./anchor.js";
-import { submitProposal } from "./propose.js";
+import { submitProposal, reportSettlement } from "./propose.js";
 import { executeHermesTrade } from "./execute.js";
 
 const CYCLE_MS = 60_000;
@@ -29,6 +29,16 @@ async function cycle(): Promise<void> {
     await executeHermesTrade(clean, clean.requestedSizeUsd).catch(err =>
       console.error("[hermes] Execute failed (non-fatal):", err)
     );
+
+    // Simulate settlement: wait 30s then report PnL proportional to confidence
+    setTimeout(async () => {
+      const direction = clean.action === "hold" ? 0 : (Math.random() > 0.35 ? 1 : -1);
+      const pnlUsd = direction * clean.confidence * clean.requestedSizeUsd * 0.005;
+      await reportSettlement("hermes", pnlUsd).catch(err =>
+        console.error("[hermes] Settlement report failed:", err)
+      );
+      console.log(`[hermes] Settlement reported: $${pnlUsd.toFixed(4)}`);
+    }, 30_000);
   } catch (err) {
     console.error("[hermes] cycle error:", err);
   }
