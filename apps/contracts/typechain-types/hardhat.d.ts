@@ -54,9 +54,17 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.ERC20Mock__factory>;
     getContractFactory(
+      name: "ThemisRegistry",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.ThemisRegistry__factory>;
+    getContractFactory(
       name: "ThemisVault",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.ThemisVault__factory>;
+    getContractFactory(
+      name: "TraceAnchor",
+      signerOrOptions?: ethers.Signer | FactoryOptions
+    ): Promise<Contracts.TraceAnchor__factory>;
 
     getContractAt(
       name: "IERC1155Errors",
@@ -109,10 +117,20 @@ declare module "hardhat/types/runtime" {
       signer?: ethers.Signer
     ): Promise<Contracts.ERC20Mock>;
     getContractAt(
+      name: "ThemisRegistry",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.ThemisRegistry>;
+    getContractAt(
       name: "ThemisVault",
       address: string | ethers.Addressable,
       signer?: ethers.Signer
     ): Promise<Contracts.ThemisVault>;
+    getContractAt(
+      name: "TraceAnchor",
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer
+    ): Promise<Contracts.TraceAnchor>;
 
     deployContract(
       name: "IERC1155Errors",
@@ -155,9 +173,17 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ERC20Mock>;
     deployContract(
+      name: "ThemisRegistry",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ThemisRegistry>;
+    deployContract(
       name: "ThemisVault",
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ThemisVault>;
+    deployContract(
+      name: "TraceAnchor",
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.TraceAnchor>;
 
     deployContract(
       name: "IERC1155Errors",
@@ -210,10 +236,20 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ERC20Mock>;
     deployContract(
+      name: "ThemisRegistry",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.ThemisRegistry>;
+    deployContract(
       name: "ThemisVault",
       args: any[],
       signerOrOptions?: ethers.Signer | DeployContractOptions
     ): Promise<Contracts.ThemisVault>;
+    deployContract(
+      name: "TraceAnchor",
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions
+    ): Promise<Contracts.TraceAnchor>;
 
     // default types
     getContractFactory(

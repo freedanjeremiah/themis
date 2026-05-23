@@ -3,4 +3,6 @@
 /* eslint-disable */
 import type * as mocks from "./mocks";
 export type { mocks };
+export type { ThemisRegistry } from "./ThemisRegistry";
 export type { ThemisVault } from "./ThemisVault";
+export type { TraceAnchor } from "./TraceAnchor";

@@ -26,5 +26,9 @@ export type { IERC165 } from "./@openzeppelin/contracts/utils/introspection/IERC
 export { IERC165__factory } from "./factories/@openzeppelin/contracts/utils/introspection/IERC165__factory";
 export type { ERC20Mock } from "./contracts/mocks/ERC20Mock";
 export { ERC20Mock__factory } from "./factories/contracts/mocks/ERC20Mock__factory";
+export type { ThemisRegistry } from "./contracts/ThemisRegistry";
+export { ThemisRegistry__factory } from "./factories/contracts/ThemisRegistry__factory";
 export type { ThemisVault } from "./contracts/ThemisVault";
 export { ThemisVault__factory } from "./factories/contracts/ThemisVault__factory";
+export type { TraceAnchor } from "./contracts/TraceAnchor";
+export { TraceAnchor__factory } from "./factories/contracts/TraceAnchor__factory";

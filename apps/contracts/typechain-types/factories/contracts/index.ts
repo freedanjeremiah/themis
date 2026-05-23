@@ -2,4 +2,6 @@
 /* tslint:disable */
 /* eslint-disable */
 export * as mocks from "./mocks";
+export { ThemisRegistry__factory } from "./ThemisRegistry__factory";
 export { ThemisVault__factory } from "./ThemisVault__factory";
+export { TraceAnchor__factory } from "./TraceAnchor__factory";
