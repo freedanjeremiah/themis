@@ -1,0 +1,172 @@
+/**
+ * Hyperliquid perp order placement helper.
+ *
+ * Uses HL's exchange API with the EIP-712 "phantom agent" signing pattern.
+ * Returns { orderId, fillPrice } — never throws on HL API errors (non-fatal
+ * since the CCTP bridge already completed).
+ */
+import { ethers } from "ethers";
+import { pack } from "msgpackr";
+import { AgentProposal } from "@themis/shared";
+
+const HL_INFO_URL     = "https://api.hyperliquid.xyz/info";
+const HL_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
+
+interface HlMeta {
+  universe: Array<{ name: string; szDecimals: number }>;
+}
+
+/**
+ * Parse coin name from tradeIdea, e.g. "long ETH-PERP 5x" → "ETH".
+ * Falls back to "ETH" if nothing is found.
+ */
+function parseCoin(tradeIdea: string): string {
+  const match = tradeIdea.match(/([A-Z]+)-PERP/i);
+  return match ? match[1].toUpperCase() : "ETH";
+}
+
+export async function placeHlOrder(
+  privateKey: string,
+  proposal: AgentProposal,
+  allocatedUsd: number,
+  agentName: string
+): Promise<{ orderId: number | null; fillPrice: number | null }> {
+  const tag = `[${agentName}][hl]`;
+
+  try {
+    // Step 1 — Get asset metadata
+    const metaResp = await fetch(HL_INFO_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "meta" }),
+    });
+    if (!metaResp.ok) {
+      console.warn(`${tag} meta request failed: ${metaResp.status}`);
+      return { orderId: null, fillPrice: null };
+    }
+    const meta = (await metaResp.json()) as HlMeta;
+
+    const coin = parseCoin(proposal.tradeIdea);
+    const assetIndex = meta.universe.findIndex((u) => u.name === coin);
+    if (assetIndex === -1) {
+      console.warn(`${tag} coin "${coin}" not found in HL universe`);
+      return { orderId: null, fillPrice: null };
+    }
+    const szDecimals = meta.universe[assetIndex].szDecimals;
+
+    // Step 2 — Get mark price
+    const midsResp = await fetch(HL_INFO_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "allMids" }),
+    });
+    if (!midsResp.ok) {
+      console.warn(`${tag} allMids request failed: ${midsResp.status}`);
+      return { orderId: null, fillPrice: null };
+    }
+    const mids = (await midsResp.json()) as Record<string, string>;
+    const markPriceStr = mids[coin];
+    if (!markPriceStr) {
+      console.warn(`${tag} no mark price found for "${coin}"`);
+      return { orderId: null, fillPrice: null };
+    }
+    const markPrice = parseFloat(markPriceStr);
+
+    const isBuy = proposal.action === "long";
+
+    // Step 3 — Compute limit price (5% slippage) and size
+    const limitPrice = isBuy ? markPrice * 1.05 : markPrice * 0.95;
+    const sizeInCoins = allocatedUsd / markPrice;
+
+    const limitPriceStr = limitPrice.toFixed(1);
+    const sizeStr       = sizeInCoins.toFixed(szDecimals);
+
+    console.log(
+      `${tag} placing ${isBuy ? "BUY" : "SELL"} ${coin} ` +
+      `size=${sizeStr} limitPrice=${limitPriceStr} (mark=${markPrice})`
+    );
+
+    // Step 4 — Build action
+    const action = {
+      type: "order",
+      orders: [
+        {
+          a: assetIndex,
+          b: isBuy,
+          p: limitPriceStr,
+          s: sizeStr,
+          r: false,
+          t: { limit: { tif: "Ioc" } },
+        },
+      ],
+      grouping: "na",
+    };
+
+    const nonce = Date.now();
+
+    // Step 5 — Sign with EIP-712 phantom agent pattern
+    const actionBytes = pack(action);
+    const nonceBuf    = Buffer.alloc(8);
+    nonceBuf.writeBigUInt64BE(BigInt(nonce));
+    const combined   = Buffer.concat([actionBytes, nonceBuf]);
+    const actionHash = ethers.keccak256(combined);
+
+    const domain = {
+      name: "Exchange",
+      version: "1",
+      chainId: 1337,
+      verifyingContract: "0x0000000000000000000000000000000000000000" as `0x${string}`,
+    };
+    const types = {
+      Agent: [
+        { name: "source",       type: "string"  },
+        { name: "connectionId", type: "bytes32" },
+      ],
+    };
+    const phantomAgent = {
+      source:       "a",
+      connectionId: actionHash,
+    };
+
+    const wallet = new ethers.Wallet(privateKey);
+    const sig    = await wallet.signTypedData(domain, types, phantomAgent);
+    const { r, s, v } = ethers.Signature.from(sig);
+
+    // Step 6 — Submit to exchange
+    const body = {
+      action,
+      nonce,
+      signature: { r, s, v },
+      vaultAddress: null,
+    };
+
+    const exchResp = await fetch(HL_EXCHANGE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!exchResp.ok) {
+      console.warn(`${tag} exchange request failed: ${exchResp.status}`);
+      return { orderId: null, fillPrice: null };
+    }
+    const result = (await exchResp.json()) as unknown;
+
+    // Step 7 — Extract fill info
+    const status    = (result as any)?.response?.data?.statuses?.[0];
+    const fillPrice = status?.filled?.avgPx ? parseFloat(status.filled.avgPx) : null;
+    const orderId   = status?.resting?.oid ?? null;
+
+    if (fillPrice !== null) {
+      console.log(`${tag} order filled at avg price ${fillPrice}`);
+    } else if (orderId !== null) {
+      console.log(`${tag} order resting on book (oid: ${orderId})`);
+    } else {
+      console.warn(`${tag} order submitted but no fill/resting status: ${JSON.stringify(status)}`);
+    }
+
+    return { orderId, fillPrice };
+  } catch (err) {
+    console.warn(`${tag} order placement error (non-fatal):`, err);
+    return { orderId: null, fillPrice: null };
+  }
+}

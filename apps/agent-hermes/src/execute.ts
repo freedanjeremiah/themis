@@ -13,6 +13,7 @@
 import { ethers } from "ethers";
 import { AgentProposal } from "@themis/shared";
 import * as dotenv from "dotenv";
+import { placeHlOrder } from "./hl.js";
 dotenv.config({ path: "../../.env" });
 
 const ENABLE_REAL_TRADES = process.env.ENABLE_REAL_TRADES === "true";
@@ -155,4 +156,23 @@ export async function executeHermesTrade(
   const mintTx = await transmitter.receiveMessage(messageBytes, attestation);
   const mintReceipt = await mintTx.wait();
   console.log(`[hermes] CCTP mint complete on destination (tx: ${mintReceipt?.hash})`);
+
+  // Place perp order on Hyperliquid (non-fatal — bridge already completed)
+  try {
+    const { orderId, fillPrice } = await placeHlOrder(
+      process.env.PRIVATE_KEY_HERMES!,
+      proposal,
+      allocatedUsd,
+      "hermes"
+    );
+    if (fillPrice !== null) {
+      console.log(`[hermes] HL order filled: avgPx=${fillPrice}`);
+    } else if (orderId !== null) {
+      console.log(`[hermes] HL order resting on book: oid=${orderId}`);
+    } else {
+      console.warn("[hermes] HL order placement returned no fill/resting — check logs above");
+    }
+  } catch (err) {
+    console.warn("[hermes] HL order placement failed (non-fatal):", err);
+  }
 }
