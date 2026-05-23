@@ -77,17 +77,18 @@ export async function signNanopayment(
   };
 }
 
-/** Log a nanopayment intent (for data sources that don't enforce 402 yet). */
+/** Sign a nanopayment and return the X-Payment header value, or null on failure. */
 export async function payForDataCall(
   signer: ethers.Wallet,
   source: string,
   amountMicroUsdc = 1000 // $0.001 per call
-): Promise<void> {
+): Promise<string | null> {  // returns X-Payment header value or null on failure
   try {
     const { header, amountUsdc } = await signNanopayment(signer, amountMicroUsdc, GATEWAY_WALLET);
-    console.log(`[pythia] Nanopayment signed — $${amountUsdc.toFixed(6)} USDC for ${source} (X-Payment: ${header.slice(0, 40)}…)`);
+    console.log(`[pythia] Nanopayment signed — $${amountUsdc.toFixed(6)} USDC for ${source}`);
+    return header;
   } catch (err) {
-    // Non-fatal — data fetch proceeds regardless
     console.warn("[pythia] Nanopayment signing failed (non-fatal):", err);
+    return null;
   }
 }

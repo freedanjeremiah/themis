@@ -17,6 +17,13 @@ dotenv.config({ path: "../../.env" });
 
 const ENABLE_REAL_TRADES = process.env.ENABLE_REAL_TRADES === "true";
 
+const IRIS_API = "https://iris-api-sandbox.circle.com/attestations";
+const MESSAGE_TRANSMITTER_ABI = [
+  { name: "receiveMessage", type: "function", stateMutability: "nonpayable",
+    inputs: [{ name: "message", type: "bytes" }, { name: "attestation", type: "bytes" }],
+    outputs: [{ name: "success", type: "bool" }] },
+] as const;
+
 const CCTP_TOKEN_MESSENGER_ABI = [
   {
     name: "depositForBurn",
@@ -45,6 +52,25 @@ const ERC20_ABI = [
 const USDC_ADDRESS          = process.env.USDC_ADDRESS ?? "0x3600000000000000000000000000000000000000";
 const CCTP_TOKEN_MESSENGER  = process.env.CCTP_TOKEN_MESSENGER ?? "";
 const HYPERLIQUID_CCTP_DOMAIN = Number(process.env.HYPERLIQUID_CCTP_DOMAIN ?? "0");
+
+async function pollIrisAttestation(messageHash: string): Promise<string | null> {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await new Promise(r => setTimeout(r, 5_000));
+    try {
+      const resp = await fetch(`${IRIS_API}/${messageHash}`);
+      if (!resp.ok) continue;
+      const data = await resp.json() as { status: string; attestation?: string };
+      if (data.status === "complete" && data.attestation) {
+        return data.attestation;
+      }
+      console.log(`[hermes] Iris attestation pending (attempt ${attempt + 1}/20)…`);
+    } catch {
+      // transient fetch error — retry
+    }
+  }
+  console.warn("[hermes] Iris attestation timed out after 100s");
+  return null;
+}
 
 /**
  * Convert an EVM address to bytes32 (right-padded with zeros → left zero-padded to 32 bytes).
@@ -97,8 +123,36 @@ export async function executeHermesTrade(
   );
   const receipt = await burnTx.wait();
   console.log(`[hermes] CCTP depositForBurn confirmed (tx: ${receipt?.hash})`);
-  console.log(`[hermes] Waiting for Iris attestation (~20s)… then receiveMessage on Hyperliquid`);
 
-  // Step 3: Iris attestation + receiveMessage on Hyperliquid is out of scope for v1.
-  // The burn is on-chain; attestation and minting happen async via the CCTP relay.
+  // Extract MessageSent log to get the message bytes and hash
+  const messageSentLog = (receipt?.logs as ethers.Log[])?.find(
+    (log: ethers.Log) => log.topics[0] === ethers.id("MessageSent(bytes)")
+  );
+  if (!messageSentLog) {
+    console.warn("[hermes] Could not find MessageSent log — attestation skipped");
+    return;
+  }
+
+  // The message is in the log data (ABI-encoded bytes)
+  const messageBytes = ethers.AbiCoder.defaultAbiCoder().decode(["bytes"], messageSentLog.data)[0] as string;
+  const messageHash  = ethers.keccak256(messageBytes);
+
+  console.log(`[hermes] Polling Iris for attestation (hash: ${messageHash.slice(0, 12)}…)`);
+  const attestation = await pollIrisAttestation(messageHash);
+  if (!attestation) return;
+
+  // Call receiveMessage on destination (Hyperliquid)
+  const destRpc = process.env.DEST_RPC_URL;
+  const destTransmitter = process.env.MESSAGE_TRANSMITTER_DEST;
+  if (!destRpc || !destTransmitter) {
+    console.warn("[hermes] DEST_RPC_URL or MESSAGE_TRANSMITTER_DEST not set — mint skipped");
+    return;
+  }
+
+  const destProvider = new ethers.JsonRpcProvider(destRpc);
+  const destWallet   = new ethers.Wallet(process.env.PRIVATE_KEY_HERMES!, destProvider);
+  const transmitter  = new ethers.Contract(destTransmitter, MESSAGE_TRANSMITTER_ABI, destWallet);
+  const mintTx = await transmitter.receiveMessage(messageBytes, attestation);
+  const mintReceipt = await mintTx.wait();
+  console.log(`[hermes] CCTP mint complete on destination (tx: ${mintReceipt?.hash})`);
 }

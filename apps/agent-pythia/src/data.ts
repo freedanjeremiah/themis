@@ -13,10 +13,15 @@ export type NewsItem = { title: string; source: string; publishedAt: string };
 
 export async function fetchNewsHeadlines(): Promise<NewsItem[]> {
   try {
-    if (pythiaWallet) await payForDataCall(pythiaWallet, "twitter.com/crypto-headlines");
+    const paymentHeader = pythiaWallet ? await payForDataCall(pythiaWallet, "twitter.com/crypto-headlines") : null;
     const resp = await axios.get(
       "https://api.twitter.com/2/tweets/search/recent?query=bitcoin+OR+ethereum+crypto+lang:en&max_results=10&tweet.fields=created_at",
-      { headers: { Authorization: `Bearer ${process.env.TWITTER_BEARER_TOKEN}` } }
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.TWITTER_BEARER_TOKEN}`,
+          ...(paymentHeader ? { "X-Payment": paymentHeader } : {}),
+        },
+      }
     );
     return (resp.data.data ?? []).map((t: any) => ({
       title: t.text,
@@ -26,9 +31,12 @@ export async function fetchNewsHeadlines(): Promise<NewsItem[]> {
   } catch {
     // Fallback: CoinDesk RSS
     try {
-      if (pythiaWallet) await payForDataCall(pythiaWallet, "coindesk.com/rss", 500); // $0.0005
+      const rssPaymentHeader = pythiaWallet ? await payForDataCall(pythiaWallet, "coindesk.com/rss", 500) : null;
       const rss = await axios.get("https://www.coindesk.com/arc/outboundfeeds/rss/", {
-        headers: { "User-Agent": "Themis/1.0" }
+        headers: {
+          "User-Agent": "Themis/1.0",
+          ...(rssPaymentHeader ? { "X-Payment": rssPaymentHeader } : {}),
+        },
       });
       const matches = [...rss.data.matchAll(/<title><!\[CDATA\[(.+?)\]\]><\/title>/g)];
       return matches.slice(0, 10).map((m: RegExpMatchArray) => ({
