@@ -1,0 +1,21 @@
+{
+  "name": "@themis/indexer",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@themis/shared": "workspace:*",
+    "ethers": "^6.11.0",
+    "express": "^4.18.0",
+    "ws": "^8.16.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.0",
+    "@types/ws": "^8.5.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -15,7 +15,57 @@ importers:
         specifier: ^5.4.0
         version: 5.9.3
 
+  apps/agent-demeter:
+    dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.27.0
+        version: 0.27.3
+      '@themis/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      axios:
+        specifier: ^1.6.0
+        version: 1.16.1
+      dotenv:
+        specifier: ^16.0.0
+        version: 16.6.1
+      ethers:
+        specifier: ^6.11.0
+        version: 6.16.0
+    devDependencies:
+      tsx:
+        specifier: ^4.7.0
+        version: 4.22.3
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
   apps/agent-hermes:
+    dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.27.0
+        version: 0.27.3
+      '@themis/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      axios:
+        specifier: ^1.6.0
+        version: 1.16.1
+      dotenv:
+        specifier: ^16.0.0
+        version: 16.6.1
+      ethers:
+        specifier: ^6.11.0
+        version: 6.16.0
+    devDependencies:
+      tsx:
+        specifier: ^4.7.0
+        version: 4.22.3
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+
+  apps/agent-pythia:
     dependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.27.0
@@ -83,6 +133,37 @@ importers:
       hardhat:
         specifier: ^2.22.0
         version: 2.28.6(ts-node@10.9.2(@types/node@25.9.1)(typescript@5.9.3))(typescript@5.9.3)
+
+  apps/indexer:
+    dependencies:
+      '@themis/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      dotenv:
+        specifier: ^16.0.0
+        version: 16.6.1
+      ethers:
+        specifier: ^6.11.0
+        version: 6.16.0
+      express:
+        specifier: ^4.18.0
+        version: 4.22.2
+      ws:
+        specifier: ^8.16.0
+        version: 8.18.0
+    devDependencies:
+      '@types/express':
+        specifier: ^4.17.0
+        version: 4.17.25
+      '@types/ws':
+        specifier: ^8.5.0
+        version: 8.18.1
+      tsx:
+        specifier: ^4.7.0
+        version: 4.22.3
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
 
   packages/shared:
     devDependencies:
@@ -1043,6 +1124,9 @@ packages:
 
   '@types/serve-static@1.15.10':
     resolution: {integrity: sha512-tRs1dB+g8Itk72rlSI2ZrW6vZg0YrLI81iQSTkMmOqnqCaNr/8Ek4VwWcN5vZgCYWbg/JJSGBlUaYGAOP73qBw==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@vitest/expect@1.6.1':
     resolution: {integrity: sha512-jXL+9+ZNIJKruofqXuuTClf44eSpcHlgj3CiuNihUF3Ioujtmc0zIa3UJOW5RjDK1YLBJZnWBlPuqhYycLioog==}
@@ -4118,6 +4202,10 @@ snapshots:
       '@types/http-errors': 2.0.5
       '@types/node': 25.9.1
       '@types/send': 0.17.6
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 25.9.1
 
   '@vitest/expect@1.6.1':
     dependencies:
