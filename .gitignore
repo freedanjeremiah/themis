@@ -11,6 +11,7 @@ dist/
 build/
 .turbo/
 out/
+.next/
 
 # OS artifacts
 .DS_Store
