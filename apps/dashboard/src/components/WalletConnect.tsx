@@ -22,10 +22,13 @@ export function WalletConnect() {
     );
   }
 
+  const connector = connectors[0];
+
   return (
     <button
-      onClick={() => connect({ connector: connectors[0] })}
-      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded transition-colors"
+      onClick={() => connector && connect({ connector })}
+      disabled={!connector}
+      className={`px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded transition-colors ${!connector ? "opacity-50 cursor-not-allowed" : ""}`}
     >
       Connect Wallet
     </button>
