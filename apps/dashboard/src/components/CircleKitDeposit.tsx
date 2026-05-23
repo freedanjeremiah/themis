@@ -1,28 +1,6 @@
 "use client";
 
-/**
- * Circle App Kit deposit wrapper.
- * Uses @circle-libs/react-elements SendTransactionForm where the API fits;
- * falls back to the wagmi-based DepositPanel for the full approve→deposit flow
- * since vault deposits require a 2-step ERC20 approve + contract call.
- *
- * Circle stack in use:
- *  - wagmi v2 + viem on Arc (Circle-recommended EVM toolkit)
- *  - USDC as native gas on Arc (Circle's enshrined stablecoin)
- *  - CCTP V2 for cross-chain USDC bridging (Hermes/Pythia agents)
- */
-
-import dynamic from "next/dynamic";
 import { DepositPanel } from "./DepositPanel";
-
-// Lazy load Circle elements — avoids SSR issues and bundle overhead if unavailable
-const CircleSendForm = dynamic(
-  () =>
-    import("@circle-libs/react-elements")
-      .then(m => m.SendTransactionForm ?? m.default)
-      .catch(() => null as never),
-  { ssr: false, loading: () => null }
-);
 
 function CirclePoweredBadge() {
   return (
