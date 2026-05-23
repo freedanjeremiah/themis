@@ -58,7 +58,8 @@ export async function signNanopayment(
     ethers.concat(["0x1901", domainSeparator, structHash])
   );
 
-  const signature = await signer.signMessage(ethers.getBytes(digest));
+  const sig = signer.signingKey.sign(digest);
+  const signature = ethers.Signature.from(sig).serialized;
 
   const payload = JSON.stringify({
     from: signer.address,
