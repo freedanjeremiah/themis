@@ -8,6 +8,14 @@ const AGENT_ADDRESSES: Record<AgentId, string> = {
   demeter: process.env.AGENT_ADDRESS_DEMETER ?? "",
 };
 
+// Validate agent addresses at startup
+const missingAddresses = Object.entries(AGENT_ADDRESSES)
+  .filter(([, addr]) => !addr || addr === "")
+  .map(([id]) => `AGENT_ADDRESS_${id.toUpperCase()}`);
+if (missingAddresses.length > 0) {
+  console.warn(`[allocator] Missing agent addresses: ${missingAddresses.join(", ")} — allocation will record empty addresses`);
+}
+
 function makeState(agentId: AgentId): AgentState {
   return {
     agentId,

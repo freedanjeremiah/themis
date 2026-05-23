@@ -4,6 +4,10 @@ import { AgentId } from "@themis/shared";
 import * as dotenv from "dotenv";
 dotenv.config({ path: "../../.env" });
 
+if (!process.env.VAULT_ADDRESS || !process.env.REGISTRY_ADDRESS) {
+  throw new Error("[allocator] VAULT_ADDRESS and REGISTRY_ADDRESS must be set in .env");
+}
+
 const provider = new ethers.JsonRpcProvider(process.env.ARC_RPC_URL!);
 const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_ALLOCATOR!, provider);
 const vault = new ethers.Contract(process.env.VAULT_ADDRESS!, ThemisVaultABI as any, wallet);
