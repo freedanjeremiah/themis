@@ -36,16 +36,21 @@ async function main() {
 
   // 1. Check allocator is up
   const stateResp = await fetch(`${ALLOCATOR}/state`);
+  if (!stateResp.ok) throw new Error(`Allocator /state returned ${stateResp.status}`);
   const stateData = await stateResp.json();
   console.log("✓ Allocator /state:", JSON.stringify(stateData).slice(0, 80));
 
   // 2. Submit mock proposals
   for (const p of mockProposals) {
-    await fetch(`${ALLOCATOR}/proposals`, {
+    const propResp = await fetch(`${ALLOCATOR}/proposals`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(p),
     });
+    if (!propResp.ok) {
+      const err = await propResp.text();
+      throw new Error(`Proposal ${p.agentId} rejected (${propResp.status}): ${err}`);
+    }
     console.log(`✓ Submitted proposal from ${p.agentId}`);
   }
 
@@ -55,11 +60,13 @@ async function main() {
 
   // 4. Check indexer state
   const tvlResp = await fetch(`${INDEXER}/tvl`);
+  if (!tvlResp.ok) throw new Error(`Indexer /tvl returned ${tvlResp.status}`);
   const tvlData = await tvlResp.json();
   console.log("✓ Indexer /tvl:", tvlData);
 
   const tracesResp = await fetch(`${INDEXER}/traces`);
-  const tracesData = await tracesResp.json();
+  if (!tracesResp.ok) throw new Error(`Indexer /traces returned ${tracesResp.status}`);
+  const tracesData = await tracesResp.json() as unknown[];
   console.log(`✓ Indexer /traces: ${tracesData.length} records`);
 
   console.log("\n=== E2E complete ===");
