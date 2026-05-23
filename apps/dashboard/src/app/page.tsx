@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useIndexerSocket } from "../hooks/useIndexerSocket";
 import { TvlBar } from "../components/TvlBar";
 import { AgentLeaderboard } from "../components/AgentLeaderboard";
@@ -68,6 +68,27 @@ export default function Home() {
       const d = msg.data as TraceItem;
       setTraces(prev => [d, ...prev].slice(0, 20));
     }
+  }, []);
+
+  useEffect(() => {
+    const indexerUrl = process.env.NEXT_PUBLIC_INDEXER_URL ?? "http://localhost:3002";
+    fetch(`${indexerUrl}/agents`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: unknown) => {
+        if (!Array.isArray(data)) return;
+        setAgents(prev => prev.map(agent => {
+          const live = (data as Array<{agentId: string; allocationUsdc?: number; sidelined?: boolean; pnlHistory?: Array<{timestamp: number; pnl: number}>}>)
+            .find(a => a.agentId === agent.agentId);
+          if (!live) return agent;
+          return {
+            ...agent,
+            allocationUsdc: live.allocationUsdc ?? agent.allocationUsdc,
+            sidelined: live.sidelined ?? agent.sidelined,
+            pnlHistory: live.pnlHistory ?? agent.pnlHistory,
+          };
+        }));
+      })
+      .catch(() => {}); // indexer may not be running in dev
   }, []);
 
   useIndexerSocket(onMessage);
