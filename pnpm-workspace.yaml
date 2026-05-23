@@ -2,5 +2,6 @@ packages:
   - "packages/*"
   - "apps/*"
 allowBuilds:
+  esbuild: true
   keccak: true
   secp256k1: true
