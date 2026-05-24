@@ -103,9 +103,18 @@ contract ThemisVault {
         emit Allocated(agent, amount, cycleId);
     }
 
-    function settle(address agent, int256 pnl) external onlyAllocator {
+    function settle(address agent, int256 pnl) external onlyAllocator notPaused {
         _resetDailyIfNeeded(agent);
         agentDailyPnl[agent] += pnl;
+
+        uint256 allocated = agentAllocation[agent];
+        // Net asset change = pnl. Agent returns allocated + pnl.
+        int256 returnInt = int256(allocated) + pnl;
+        require(returnInt >= 0, "agent owes more than allocation");
+        uint256 returnAmt = uint256(returnInt);
+        if (returnAmt > 0) {
+            usdc.safeTransferFrom(agent, address(this), returnAmt);
+        }
 
         if (pnl >= 0) {
             totalAssets += uint256(pnl);
@@ -114,8 +123,7 @@ contract ThemisVault {
             totalAssets = totalAssets > loss ? totalAssets - loss : 0;
         }
 
-        totalDeployed = totalDeployed > agentAllocation[agent]
-            ? totalDeployed - agentAllocation[agent] : 0;
+        totalDeployed = totalDeployed > allocated ? totalDeployed - allocated : 0;
         agentAllocation[agent] = 0;
 
         uint256 basis = agentDailyDeployed[agent];
