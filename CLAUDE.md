@@ -31,32 +31,28 @@ scripts/          create-wallets, deploy, register-agents, set-allocator, e2e.
 ## Architecture invariants
 
 - **Chain**: Arc testnet, chain ID **5042002**. USDC (`0x36...0000`) is the **native gas token** — there is no Paymaster and no separate gas token. Treat `chain.nativeCurrency` as USDC in any new wagmi/viem config.
-- **Vault model**: `allocate()` on `ThemisVault.sol` **updates accounting only — it does NOT move USDC** out of the vault to the agent. Agents must already hold USDC in their own wallet to execute trades; the vault tracks `agentAllocation[agent]` as a bookkeeping balance. `settle()` adjusts `totalAssets` by reported PnL. This diverges from a literal reading of the PRD but is intentional for the hackathon timeline. If you change this, also change every agent's `execute.ts` (CCTP source wallet).
-- **Daily loss cap (−5%)** is enforced **on-chain** in `ThemisVault.settle()` (L109–115), not in the allocator. `state.sidelineAgent()` in `allocator/src/state.ts:59` is dead code — the on-chain `agentSidelined` flag is the source of truth, and any subsequent `allocate()` reverts.
+- **Vault is the real USDC custody point** (Phase 1). `ThemisVault.allocate(agent, amount, cycleId)` does `usdc.safeTransfer(agent, delta)` after a `liquidReserve` precondition check; the agent's wallet really holds the allocated USDC. `settle(agent, pnl)` does `usdc.safeTransferFrom(agent, vault, allocated + pnl)` — so on a gain the agent returns `allocated + |pnl|`, on a loss the agent returns `allocated − |loss|`, vault net delta is always `pnl`. The agent must `approve(vault, MAX)` once after registration — use `scripts/approve-vault.ts <agentId>`.
+- **Daily loss cap (−5%)** is enforced **on-chain** in `ThemisVault.settle()` (search for `LOSS_CAP_BPS`). After a breach, `agentSidelined[agent] = true` and any subsequent `allocate()` reverts. The off-chain allocator does not need to enforce this — the on-chain flag is the source of truth.
+- **Pause coverage**: `deposit`, `withdraw`, `allocate`, and `settle` all carry the `notPaused` modifier. `forceSettle(agent, pnl)` is an admin-only escape that bypasses the pause for wind-down (same accounting as settle, no daily reset, no sideline).
+- **TraceAnchor is registry-gated**: `anchor(hash, cid)` requires `msg.sender` to be a registered agent in `ThemisRegistry`. The agent address argument is gone — the contract reads it from `msg.sender`.
 - **Trade execution is gated by `ENABLE_REAL_TRADES=true`** in `.env`. Default is `false`: agents log what they would do but skip CCTP bridging and HL order placement. Always honor this flag in any new execute code path.
 - **Agent identity**: agents are identified off-chain by `AgentId = "hermes" | "pythia" | "demeter"` and on-chain by their EOA address. The indexer maps address → id via env vars; if `AGENT_ADDRESS_*` is wrong, events are silently dropped (`indexer/src/poller.ts:39`).
 
 ## Known traps (read before editing)
 
-1. **`packages/shared/src/abis/*.json` are empty `[]`.** Every off-chain service (allocator, indexer, all three agents, `scripts/register-agents.ts`, `scripts/set-allocator.ts`) imports from `@themis/shared/abis`. With an empty ABI, *any* contract method call will throw at runtime. Hardhat compiles real ABIs into `apps/contracts/artifacts/contracts/<Contract>.sol/<Contract>.json` but there is no copy/sync step. Before running anything off-chain end-to-end, either (a) populate those three JSON files from artifacts, or (b) wire a postinstall/predev step that does it. The dashboard has its own inline ABIs in `apps/dashboard/src/lib/abis.ts` so it works in isolation.
+1. **PnL reported to `vault.settle()` is still synthetic.** All three agents fall back to formulae like `direction * confidence * size * 0.005` when no real position closes (`agent-hermes/src/index.ts`, `agent-pythia/src/index.ts`, `agent-demeter/src/index.ts`). The allocator's Sharpe-based scoring is gaming itself. **Phase 2 (Real PnL)** addresses this — until then, treat scoring as theatre.
 
-2. **PnL reported to `vault.settle()` is synthetic.** All three agents fall back to formulae like `direction * confidence * size * 0.005` when no real position closes (`agent-hermes/src/index.ts:35-66`, `agent-pythia/src/index.ts:40-70`, `agent-demeter/src/index.ts:34-42`). This means the allocator's Sharpe-based scoring is gaming itself. If you fix this, fix it in all three agents.
+2. **Aave is not deployed on Arc testnet.** `agent-demeter/src/data.ts` falls back to mock APYs (520/480 bps with block-number noise) if `AAVE_POOL_ADDRESS` is unset. USYC Teller is real and works.
 
-3. **`apps/dashboard/src/components/CircleKitDeposit.tsx` is cosmetic.** It adds a "Powered by Circle" badge but delegates to a custom wagmi-based `DepositPanel`. There is no real Circle App Kit `SendTransactionForm` integration (the 2-step approve→deposit doesn't fit Send's UX). Don't claim App Kit Send is integrated.
+3. **Pythia's data fallback is identical every cycle.** When Twitter and RSS both fail, `data.ts` returns a static "markets steady" headline. Claude then produces identical proposals every cycle until the cycle is skipped (Phase 2).
 
-4. **`scripts/e2e.ts` does NOT exercise the full flow.** It POSTs three hardcoded mock proposals to the allocator and reads the indexer. No deposit, no on-chain allocate, no settle. Don't use it to verify end-to-end correctness.
+4. **Indexer DB lives at `apps/indexer/themis.db`** (file-backed via `node:sqlite`). Allocator DB lives at `apps/allocator/state.db`. Delete files to reset state. Requires Node ≥ 22.5 for the built-in `node:sqlite` import.
 
-5. **Allocator state is in-memory only.** `allocator/src/state.ts` resets `pnlHistory` and `tradesCompleted` on every restart, so Sharpe is unreliable across restarts. Persist to SQLite or rehydrate from indexer if you care about continuity.
+5. **The currently-deployed on-chain `TraceAnchor` at `0x87704aB48dE82aBa4FaF3ba81E1edbD37935195c` predates the Phase 1 auth change** — its constructor took no args and its `anchor()` had a different signature. Any redeploy MUST use the new ABI (registry address in constructor; `anchor(hash, cid)` only). Documented depositors are still on the old vault; redeploy only with a migration plan.
 
-6. **`TraceAnchor.anchor()` has no auth** — any caller can anchor any agent's traces. Acceptable for hackathon; flag if hardening.
+### Phase 1 changes (foundation done — was previously broken)
 
-7. **Aave is not deployed on Arc testnet.** `agent-demeter/src/data.ts:101-117` falls back to mock APYs (520/480 bps with block-number noise) if `AAVE_POOL_ADDRESS` is unset. USYC Teller is real and works.
-
-8. **Pythia's data fallback is identical every cycle.** When Twitter and RSS both fail, `data.ts:49` returns `[{ title: "Crypto markets steady, no major moves" }]`. Claude then produces identical proposals every cycle. Consider caching the last real headline instead.
-
-9. **`register-agents.ts` is redundant** — `scripts/deploy.ts` already registers all three agents (L55-67). Don't run both.
-
-10. **Indexer DB lives at `apps/indexer/themis.db`** (file-backed via `node:sqlite`). Delete the file to reset state. Requires Node ≥ 22.5 for the built-in `node:sqlite` import.
+Phase 1 fixed: empty shared ABIs (now auto-synced via `pnpm abis`, enforced in CI); the vault didn't actually move USDC (now `allocate` transfers, `settle` pulls back); cosmetic `CircleKitDeposit` wrapper (deleted); fake `e2e.ts` (now a real deploy→deposit→allocate→settle→anchor→withdraw round-trip against a hardhat node); in-memory allocator state (now persisted to SQLite); `TraceAnchor` had no auth (now registry-gated); redundant `register-agents.ts` (deleted, deploy.ts handles it).
 
 ## Deployed contracts (Arc testnet)
 
@@ -70,13 +66,14 @@ Don't redeploy unless you must — depositors are on these addresses.
 
 ## Common tasks
 
-- **Run everything**: `pnpm dev` from repo root.
+- **Run everything**: `pnpm dev` from repo root. (Triggers `predev` → `pnpm abis` → contracts compile + ABIs sync.)
 - **Run one service**: `cd apps/<app> && pnpm dev`.
-- **Compile contracts + regenerate artifacts**: `cd apps/contracts && pnpm hardhat compile`. Then sync ABIs into `packages/shared/src/abis/*.json` (see trap #1).
-- **Run contract tests**: `cd apps/contracts && pnpm hardhat test`. Only `ThemisVault.test.ts` and `TraceAnchor.test.ts` exist; `ThemisRegistry` has no tests.
-- **Run allocator scorer tests**: `cd apps/allocator && pnpm vitest`.
-- **Smoke test allocator + indexer**: `pnpm tsx scripts/e2e.ts` (HTTP only, see trap #4).
-- **Deploy contracts (rare)**: `cd apps/contracts && pnpm hardhat run ../../scripts/deploy.ts --network arc`.
+- **Compile + sync ABIs explicitly**: `pnpm abis` from repo root.
+- **Run contract tests**: `cd apps/contracts && pnpm hardhat test` (21 tests across `ThemisVault`, `ThemisRegistry`, `TraceAnchor`).
+- **Run allocator tests**: `cd apps/allocator && pnpm test` (8 tests across `scorer`, `state`).
+- **Real end-to-end test** (vault round-trip on local hardhat): in one terminal `cd apps/contracts && pnpm hardhat node`; in another from repo root `pnpm tsx scripts/e2e.ts`. Should end with `=== PHASE 1 END-TO-END PASSED ===`.
+- **Agent approves vault (one-time after wallet funding)**: `pnpm tsx scripts/approve-vault.ts <hermes|pythia|demeter>`.
+- **Deploy contracts to Arc testnet (rare)**: `cd apps/contracts && pnpm hardhat run ../../scripts/deploy.ts --network arc`.
 
 ## Tech choices
 
@@ -104,10 +101,11 @@ Don't redeploy unless you must — depositors are on these addresses.
 
 ## When changing things
 
-- Editing a contract → recompile → **sync ABI to `packages/shared/src/abis/`** → restart all off-chain services.
+- Editing a contract → `pnpm abis` (compiles + syncs ABIs automatically) → restart all off-chain services. CI fails if the shared ABIs drift from compiled artifacts.
 - Editing `packages/shared/src/types.ts` → all apps consume this; rebuild Turbo cache if anything is stale (`pnpm turbo build --force`).
 - Editing `.env` → restart every service; nothing watches it.
 - Touching trade execution paths → keep `ENABLE_REAL_TRADES=false` until you've stared at the diff. Real CCTP bridges burn USDC on the source chain.
+- After deploying a fresh agent wallet → run `pnpm tsx scripts/approve-vault.ts <agentId>` so the vault can pull USDC back during `settle()`. Without this, every settle reverts.
 
 ## Today's deadline
 
