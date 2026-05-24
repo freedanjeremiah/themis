@@ -4,8 +4,7 @@ import { anchorTrace } from "./anchor.js";
 import { submitProposal, reportSettlement } from "./propose.js";
 import { executePythiaTrade } from "./execute.js";
 import { closeHlPosition } from "./hl.js";
-
-const CYCLE_MS = 60_000;
+import { AGENT_CYCLE_MS, PYTHIA_HOLD_MS } from "@themis/shared";
 
 async function cycle(): Promise<void> {
   console.log(`[pythia] cycle start ${new Date().toISOString()}`);
@@ -37,7 +36,7 @@ async function cycle(): Promise<void> {
     });
 
     // Settle after 5 minutes — use real HL position PnL if available, otherwise fake
-    const SETTLE_DELAY_MS = position ? 5 * 60_000 : 30_000;
+    const SETTLE_DELAY_MS = position ? PYTHIA_HOLD_MS : 30_000;
     setTimeout(async () => {
       let pnlUsd: number;
       if (position?.fillPrice) {
@@ -74,4 +73,4 @@ async function cycle(): Promise<void> {
 }
 
 cycle();
-setInterval(cycle, CYCLE_MS);
+setInterval(cycle, AGENT_CYCLE_MS);

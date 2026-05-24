@@ -3,8 +3,7 @@ import { reason } from "./reason.js";
 import { anchorTrace } from "./anchor.js";
 import { submitProposal, reportSettlement } from "./propose.js";
 import { executeDemeterRotation } from "./execute.js";
-
-const CYCLE_MS = 60_000;
+import { AGENT_CYCLE_MS, DEMETER_HOLD_MS } from "@themis/shared";
 
 async function cycle(): Promise<void> {
   console.log(`[demeter] cycle start ${new Date().toISOString()}`);
@@ -39,11 +38,11 @@ async function cycle(): Promise<void> {
         console.error("[demeter] Settlement report failed:", err)
       );
       console.log(`[demeter] Yield settlement reported: $${cycleYieldUsd.toFixed(6)} (APY ~${(apyFraction * 100).toFixed(2)}%)`);
-    }, 45_000);
+    }, DEMETER_HOLD_MS);
   } catch (err) {
     console.error("[demeter] cycle error:", err);
   }
 }
 
 cycle();
-setInterval(cycle, CYCLE_MS);
+setInterval(cycle, AGENT_CYCLE_MS);
