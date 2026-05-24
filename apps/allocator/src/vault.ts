@@ -19,19 +19,36 @@ const AGENT_ADDRESSES: Record<AgentId, string> = {
   demeter: process.env.AGENT_ADDRESS_DEMETER!,
 };
 
+// All state-changing txs go through the same allocator wallet. Concurrent
+// /settle requests (or a settle racing the cycle's allocate) would otherwise
+// submit two txs with the same nonce and one would fail. Serialize them: each
+// op waits for the previous to mine before submitting, so nonces never collide.
+let txChain: Promise<unknown> = Promise.resolve();
+function runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+  const next = txChain.then(fn, fn);
+  txChain = next.then(() => {}, () => {});
+  return next;
+}
+
 export async function vaultAllocate(agentId: AgentId, amountUsdc6: bigint, cycleId: number): Promise<void> {
-  const tx = await vault.allocate(AGENT_ADDRESSES[agentId], amountUsdc6, BigInt(cycleId));
-  await tx.wait();
+  return runExclusive(async () => {
+    const tx = await vault.allocate(AGENT_ADDRESSES[agentId], amountUsdc6, BigInt(cycleId));
+    await tx.wait();
+  });
 }
 
 export async function vaultSettle(agentId: AgentId, pnlUsdc6: bigint): Promise<void> {
-  const tx = await vault.settle(AGENT_ADDRESSES[agentId], pnlUsdc6);
-  await tx.wait();
+  return runExclusive(async () => {
+    const tx = await vault.settle(AGENT_ADDRESSES[agentId], pnlUsdc6);
+    await tx.wait();
+  });
 }
 
 export async function registryRecord(agentId: AgentId, won: boolean, pnlUsdc6: bigint): Promise<void> {
-  const tx = await registry.recordOutcome(AGENT_ADDRESSES[agentId], won, pnlUsdc6);
-  await tx.wait();
+  return runExclusive(async () => {
+    const tx = await registry.recordOutcome(AGENT_ADDRESSES[agentId], won, pnlUsdc6);
+    await tx.wait();
+  });
 }
 
 export async function getTotalAssetsUsdc(): Promise<number> {
