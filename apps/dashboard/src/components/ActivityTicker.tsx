@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { type WsMessage } from "@themis/shared";
-import { AGENT_META } from "../lib/agent-meta.js";
+import { AGENT_META } from "../lib/agent-meta";
 
 const MAX = 8;
 

@@ -1,7 +1,7 @@
 "use client";
 import { useConnect, useSwitchChain } from "wagmi";
 import { injected } from "wagmi/connectors";
-import { useOnboardingStep, type OnboardingStep } from "../hooks/useOnboardingStep.js";
+import { useOnboardingStep, type OnboardingStep } from "../hooks/useOnboardingStep";
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
 const FAUCET_URL = process.env.NEXT_PUBLIC_FAUCET_URL ?? "https://docs.arc.network/testnet";

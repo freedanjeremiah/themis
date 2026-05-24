@@ -1,6 +1,6 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { fetchTrace } from "../lib/ipfs.js";
+import { fetchTrace } from "../lib/ipfs";
 
 /**
  * Lazy IPFS trace fetcher. Only fires when `enabled` is true (default false).

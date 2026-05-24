@@ -1,5 +1,5 @@
 "use client";
-import { type WsConnectionState } from "../hooks/useIndexerSocket.js";
+import { type WsConnectionState } from "../hooks/useIndexerSocket";
 
 const DOT_CLASS: Record<WsConnectionState, string> = {
   open: "bg-green-500",

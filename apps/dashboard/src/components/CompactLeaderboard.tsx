@@ -1,6 +1,6 @@
 "use client";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
-import { AgentBadge } from "./AgentBadge.js";
+import { AgentBadge } from "./AgentBadge";
 
 type AgentRow = {
   agentId: string;

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useAccount, useChainId, useReadContract } from "wagmi";
-import { ThemisVaultABI as ThemisVaultABIRaw } from "@themis/shared/abis";
+import ThemisVaultABIRaw from "@themis/shared/abis/ThemisVault.json";
 
 const ThemisVaultABI = ThemisVaultABIRaw as readonly any[];
 const ERC20_ABI = [

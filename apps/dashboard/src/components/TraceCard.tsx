@@ -1,6 +1,6 @@
 "use client";
-import { AgentBadge } from "./AgentBadge.js";
-import { WhyExpandable } from "./WhyExpandable.js";
+import { AgentBadge } from "./AgentBadge";
+import { WhyExpandable } from "./WhyExpandable";
 
 export type TraceItem = {
   id?: number;

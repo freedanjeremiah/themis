@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { useTrace } from "../hooks/useTrace.js";
-import { TraceUnavailableError } from "../lib/ipfs.js";
+import { useTrace } from "../hooks/useTrace";
+import { TraceUnavailableError } from "../lib/ipfs";
 
 export function WhyExpandable({ cid }: { cid: string }) {
   const [open, setOpen] = useState(false);

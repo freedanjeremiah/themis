@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { AGENT_META, AGENT_PILL_CLASSES, type AgentId } from "../lib/agent-meta.js";
+import { AGENT_META, AGENT_PILL_CLASSES, type AgentId } from "../lib/agent-meta";
 
 const VALID_AGENT_IDS = ["hermes", "pythia", "demeter"] as const;
 function isAgentId(s: string): s is AgentId {

@@ -7,7 +7,7 @@ import {
 } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { parseUnits, formatUnits } from "viem";
-import { ThemisVaultABI as ThemisVaultABIRaw } from "@themis/shared/abis";
+import ThemisVaultABIRaw from "@themis/shared/abis/ThemisVault.json";
 import { wagmiConfig } from "../lib/wagmi";
 import { WalletConnect } from "./WalletConnect";
 

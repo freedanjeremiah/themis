@@ -1,7 +1,7 @@
 "use client";
-import { TraceCard, type TraceItem } from "./TraceCard.js";
-import { WsStatusIndicator } from "./WsStatusIndicator.js";
-import { type WsConnectionState } from "../hooks/useIndexerSocket.js";
+import { TraceCard, type TraceItem } from "./TraceCard";
+import { WsStatusIndicator } from "./WsStatusIndicator";
+import { type WsConnectionState } from "../hooks/useIndexerSocket";
 
 const MAX_VISIBLE = 8;
 
