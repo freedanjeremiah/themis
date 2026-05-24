@@ -41,7 +41,7 @@ export async function anchorTrace(
 
   // Anchor on-chain (non-fatal if it fails during dev/testnet)
   try {
-    const tx = await anchorContract.anchor(wallet.address, hash, cid);
+    const tx = await anchorContract.anchor(hash, cid);
     await tx.wait();
   } catch (err) {
     console.error(`[${AGENT_ID}] on-chain anchor failed:`, err);

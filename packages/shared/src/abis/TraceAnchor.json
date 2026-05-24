@@ -1,5 +1,16 @@
 [
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_registry",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
     "anonymous": false,
     "inputs": [
       {
@@ -33,11 +44,6 @@
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "agent",
-        "type": "address"
-      },
-      {
         "internalType": "bytes32",
         "name": "hash",
         "type": "bytes32"
@@ -51,6 +57,19 @@
     "name": "anchor",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "registry",
+    "outputs": [
+      {
+        "internalType": "contract IThemisRegistryView",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   }
 ]
