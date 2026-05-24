@@ -2,11 +2,15 @@
   "name": "themis",
   "private": true,
   "scripts": {
+    "abis": "pnpm --filter @themis/contracts build && tsx scripts/sync-abis.ts",
+    "predev": "pnpm abis",
+    "prebuild": "pnpm abis",
     "dev": "turbo dev",
     "build": "turbo build",
     "test": "turbo test"
   },
   "devDependencies": {
+    "tsx": "^4.22.3",
     "turbo": "^2.0.0",
     "typescript": "^5.4.0"
   },
