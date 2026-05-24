@@ -41,3 +41,9 @@ jobs:
 
       - name: Typecheck dashboard
         run: pnpm --filter @themis/dashboard exec tsc --noEmit
+
+      - name: Build dashboard
+        # `next build` catches webpack-resolution + import-syntax failures that
+        # `tsc --noEmit` misses (e.g. .js import extensions, workspace exports
+        # pointing at non-existent dist). tsc alone is not sufficient.
+        run: pnpm --filter @themis/dashboard build
