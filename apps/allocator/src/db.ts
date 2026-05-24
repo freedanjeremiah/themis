@@ -2,8 +2,11 @@
 import { DatabaseSync } from "node:sqlite";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as dotenv from "dotenv";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: join(__dirname, "../../../.env") });
+
 const DB_PATH = process.env.ALLOCATOR_DB_PATH ?? join(__dirname, "../state.db");
 
 export const db = new DatabaseSync(DB_PATH);

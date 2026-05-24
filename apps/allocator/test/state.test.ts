@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +15,11 @@ describe("allocator state persistence", () => {
     vi.resetModules();
   });
 
-  it("persists settlements across re-imports of state.ts", async () => {
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("persists settlements and cumulative PnL across re-imports of state.ts", async () => {
     // First import: record a settlement.
     const mod1 = await import("../src/state.js");
     mod1.state.recordSettlement("hermes", 1.5);
@@ -30,7 +34,6 @@ describe("allocator state persistence", () => {
     // pnlHistory order: oldest to newest after reverse
     expect(s.pnlHistory[0].pnl).toBe(1.5);
     expect(s.pnlHistory[1].pnl).toBe(-0.5);
-
-    rmSync(tmp, { recursive: true, force: true });
+    expect(s.cumulativePnlToday).toBeCloseTo(1.0); // 1.5 + (-0.5) = 1.0
   });
 });
