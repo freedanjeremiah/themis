@@ -78,13 +78,13 @@ async function main() {
   const arcDomain = Number(process.env.ARC_CCTP_DOMAIN!);
   console.log(`[verify-cctp-reverse] burning $1 on HL testnet → destDomain ${arcDomain}...`);
   const tm = new ethers.Contract(process.env.CCTP_TOKEN_MESSENGER_HL!, TM_ABI, srcWallet);
+  const burnStart = Date.now();
   const burnTx = await tm.depositForBurn(
     amount,
     arcDomain,
     addressToBytes32(srcWallet.address),
     process.env.USDC_ADDRESS_HL!,
   );
-  const burnStart = Date.now();
   const burnReceipt = await burnTx.wait();
   console.log(`[verify-cctp-reverse] burn tx: ${burnReceipt!.hash}`);
 
