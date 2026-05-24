@@ -12,3 +12,10 @@ export async function submitProposal(proposal: AgentProposal): Promise<void> {
 export async function reportSettlement(agentId: string, pnlUsd: number): Promise<void> {
   await axios.post(`${ALLOCATOR_URL}/settle`, { agentId, pnlUsd });
 }
+
+export async function postStuck(agentId: string, reason: string | null): Promise<void> {
+  const url = `${ALLOCATOR_URL}/stuck`;
+  await axios.post(url, { agentId, reason }).catch(err =>
+    console.warn(`[hermes] postStuck failed:`, err)
+  );
+}
