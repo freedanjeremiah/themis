@@ -1,15 +1,12 @@
 /**
- * Execute a Pythia trade:
- *   1. Bridge USDC from Arc → HL testnet via CCTP (uses cctp.ts).
- *   2. Place perp order on HL testnet (uses @themis/hl-client).
+ * Execute a Pythia trade: place a perp order on HL testnet (uses @themis/hl-client).
+ * HL wallet is pre-funded with testnet USDC — no Arc→HL bridge needed.
  *
- * Gated by ENABLE_REAL_TRADES=true. Returns null when bridge or order fails,
- * or when ENABLE_REAL_TRADES is false. The cycle in index.ts handles stuck
+ * Gated by ENABLE_REAL_TRADES=true. The cycle in index.ts handles stuck
  * reporting and settle.
  */
 import { AgentProposal } from "@themis/shared";
 import { placeHlOrder } from "@themis/hl-client";
-import { bridgeArcToHl } from "./cctp.js";
 import * as dotenv from "dotenv";
 dotenv.config({ path: "../../.env" });
 
@@ -25,7 +22,7 @@ export type PythiaPosition = {
 
 export type ExecuteResult =
   | { ok: true; position: PythiaPosition }
-  | { ok: false; reason: string; burnTxHash?: string };
+  | { ok: false; reason: string };
 
 export async function executePythiaTrade(
   proposal: AgentProposal,
@@ -36,11 +33,7 @@ export async function executePythiaTrade(
     return { ok: false, reason: "real_trades_disabled" };
   }
 
-  const amountUsdc6 = BigInt(Math.floor(allocatedUsd * 1_000_000));
-  const bridge = await bridgeArcToHl(amountUsdc6);
-  if (bridge.status !== "complete") {
-    return { ok: false, reason: bridge.status, burnTxHash: bridge.burnTxHash };
-  }
+  console.log(`[pythia] using pre-funded HL testnet USDC for $${allocatedUsd} trade`);
 
   const order = await placeHlOrder(
     process.env.PRIVATE_KEY_PYTHIA!,

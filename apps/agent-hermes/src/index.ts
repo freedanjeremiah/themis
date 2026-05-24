@@ -4,7 +4,6 @@ import { anchorTrace } from "./anchor.js";
 import { submitProposal, reportSettlement, postStuck } from "./propose.js";
 import { executeHermesTrade, HermesPosition } from "./execute.js";
 import { closeHlPosition } from "@themis/hl-client";
-import { bridgeHlToArc } from "./cctp.js";
 import { AGENT_CYCLE_MS, HERMES_HOLD_MS } from "@themis/shared";
 
 async function holdAndClose(position: HermesPosition, allocatedUsd: number): Promise<number | null> {
@@ -64,8 +63,8 @@ async function cycle(): Promise<void> {
         await reportSettlement("hermes", 0);
         return;
       }
-      console.warn(`[hermes] execute failed: ${exec.reason} (burn=${exec.burnTxHash ?? "n/a"})`);
-      await postStuck("hermes", `execute:${exec.reason}${exec.burnTxHash ? `:${exec.burnTxHash}` : ""}`);
+      console.warn(`[hermes] execute failed: ${exec.reason}`);
+      await postStuck("hermes", `execute:${exec.reason}`);
       return;
     }
 
@@ -75,17 +74,6 @@ async function cycle(): Promise<void> {
       return;
     }
     console.log(`[hermes] real HL PnL: $${pnlUsd.toFixed(4)}`);
-
-    // Bridge proceeds back so the vault can pull on settle.
-    const proceedsUsd = allocatedUsd + pnlUsd;
-    const proceedsUsd6 = BigInt(Math.max(0, Math.floor(proceedsUsd * 1_000_000)));
-    if (proceedsUsd6 > 0n) {
-      const back = await bridgeHlToArc(proceedsUsd6);
-      if (back.status !== "complete") {
-        await postStuck("hermes", `reverse_bridge:${back.status}:${back.burnTxHash}`);
-        return;
-      }
-    }
 
     await reportSettlement("hermes", pnlUsd);
     console.log(`[hermes] settlement reported: $${pnlUsd.toFixed(4)}`);
