@@ -52,11 +52,19 @@ scripts/          create-wallets, deploy, register-agents, set-allocator, e2e.
 
 6. **Stuck-agent recovery is manual.** When an agent hits `stuck`, the allocator stops scoring it. Operator runs `pnpm tsx scripts/cctp-recover.ts <agentId> <burnTxHash> [arc-to-hl|hl-to-arc]` to mint the orphaned bridge, then `curl -X POST $ALLOCATOR_URL/stuck -d '{"agentId":"<id>","reason":null}'` to clear the flag.
 
-### Phase 1 + Phase 2 changes (foundation + real PnL done)
+### Phase 1 + Phase 2 + Phase 3 changes
 
 **Phase 1** fixed: empty shared ABIs (auto-synced via `pnpm abis`, enforced in CI); vault didn't actually move USDC (now `allocate` transfers, `settle` pulls back); cosmetic `CircleKitDeposit` wrapper (deleted); fake `e2e.ts` (now real round-trip against hardhat node); in-memory allocator state (now SQLite); `TraceAnchor` had no auth (now registry-gated); redundant `register-agents.ts` (deleted).
 
 **Phase 2** fixed: synthetic PnL across all three agents (now real — Hermes/Pythia close real HL testnet positions, Demeter measures USYC delta); `hl.ts` duplicated in two agents (now `packages/hl-client/`); HL mainnet defaults in `.env.example` (now testnet, mainnet commented); CCTP one-way only (now `bridgeArcToHl` + `bridgeHlToArc` per agent); allocator had no stuck-agent surface (now SQLite-persisted `stuckReason` + `POST /stuck` + cycle filter); Pythia identical-cycle headline fallback (now last-real cache + `StaleHeadlinesError` skips cycle); agents used `requestedSizeUsd` even when allocator scaled down (now read `vault.agentAllocation` after the allocate-wait).
+
+**Phase 3** reshaped the dashboard for first-time visitors:
+- New layout: `DisclaimerBanner` (top) → `TvlBar` → `OnboardingStrip` (auto-hides after first deposit) → main grid `[ReasoningTheater 2/3 + (CompactLeaderboard + DepositPanel) 1/3]` → `ActivityTicker` (fixed bottom).
+- New components: `AgentBadge` (hover tooltip with thesis), `TraceCard` (big confidence-bar card), `WhyExpandable` (lazy IPFS reasoning disclosure via React Query + 3-gateway race), `ReasoningTheater` (skeleton + WS status header), `CompactLeaderboard` (sparkline sidebar), `OnboardingStrip` (Connect→AddArc→USDC→$10 flow), `WsStatusIndicator` (green/amber/red dot), `DisclaimerBanner` (dismissable testnet warning).
+- Single source of truth for agent display in `apps/dashboard/src/lib/agent-meta.ts` (`AGENT_META`).
+- Deposit prefill drives `<DepositPanel prefilledAmount={10} prefillNonce={n} />` — the nonce changes on every click so re-presses re-fill the input.
+- New env var `NEXT_PUBLIC_FAUCET_URL` (operator: replace with the canonical Arc faucet URL when available; defaults to docs link).
+- Deleted: `TracesFeed.tsx` (superseded by ReasoningTheater + TraceCard), `AgentLeaderboard.tsx` (superseded by CompactLeaderboard).
 
 ## Deployed contracts (Arc testnet)
 
