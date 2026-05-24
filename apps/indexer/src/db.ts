@@ -6,7 +6,8 @@ import { fileURLToPath } from "url";
 import { dirname } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const db = new DatabaseSync(join(__dirname, "../../themis.db"));
+const DB_PATH = process.env.INDEXER_DB_PATH ?? join(__dirname, "../../themis.db");
+const db = new DatabaseSync(DB_PATH);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS deposits (

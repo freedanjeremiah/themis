@@ -1,11 +1,15 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useIndexerSocket } from "../hooks/useIndexerSocket";
 import { TvlBar } from "../components/TvlBar";
-import { AgentLeaderboard } from "../components/AgentLeaderboard";
-import { TracesFeed } from "../components/TracesFeed";
-import { WsMessage } from "@themis/shared";
+import { CompactLeaderboard } from "../components/CompactLeaderboard";
+import { ReasoningTheater } from "../components/ReasoningTheater";
+import { ActivityTicker } from "../components/ActivityTicker";
+import { OnboardingStrip } from "../components/OnboardingStrip";
+import { DisclaimerBanner } from "../components/DisclaimerBanner";
+import { type TraceItem } from "../components/TraceCard";
+import type { WsMessage } from "@themis/shared";
 
 const DepositPanel = dynamic(
   () => import("../components/DepositPanel").then(m => m.DepositPanel),
@@ -23,18 +27,8 @@ type AgentRow = {
   maxDrawdown: number;
 };
 
-type TraceItem = {
-  id?: number;
-  agentId: string;
-  cid: string;
-  hash: string;
-  tradeIdea: string;
-  confidence: number;
-  blockTime: number;
-};
-
 const INITIAL_AGENTS: AgentRow[] = [
-  { agentId: "hermes", allocationUsdc: 0, totalUsdc: 0, pnlHistory: [], sidelined: false, tradesCompleted: 0, sharpe: 0, maxDrawdown: 0 },
+  { agentId: "hermes",  allocationUsdc: 0, totalUsdc: 0, pnlHistory: [], sidelined: false, tradesCompleted: 0, sharpe: 0, maxDrawdown: 0 },
   { agentId: "pythia",  allocationUsdc: 0, totalUsdc: 0, pnlHistory: [], sidelined: false, tradesCompleted: 0, sharpe: 0, maxDrawdown: 0 },
   { agentId: "demeter", allocationUsdc: 0, totalUsdc: 0, pnlHistory: [], sidelined: false, tradesCompleted: 0, sharpe: 0, maxDrawdown: 0 },
 ];
@@ -44,8 +38,13 @@ export default function Home() {
   const [depositCount, setDepositCount] = useState(0);
   const [agents, setAgents] = useState<AgentRow[]>(INITIAL_AGENTS);
   const [traces, setTraces] = useState<TraceItem[]>([]);
+  const [feed, setFeed] = useState<WsMessage[]>([]);
+  const [depositPrefill, setDepositPrefill] = useState<number | undefined>(undefined);
+  const [prefillNonce, setPrefillNonce] = useState(0);
+  const depositRef = useRef<HTMLDivElement | null>(null);
 
   const onMessage = useCallback((msg: WsMessage) => {
+    setFeed(prev => [msg, ...prev].slice(0, 32));
     if (msg.event === "deposit") {
       const d = msg.data as { amount: number };
       setTvl(prev => prev + d.amount);
@@ -63,11 +62,7 @@ export default function Home() {
       setAgents(prev =>
         prev.map(a =>
           a.agentId === d.agentId
-            ? {
-                ...a,
-                allocationUsdc: 0,
-                pnlHistory: [...a.pnlHistory, { timestamp: Date.now(), pnl: d.pnl }],
-              }
+            ? { ...a, allocationUsdc: 0, pnlHistory: [...a.pnlHistory, { timestamp: Date.now(), pnl: d.pnl }] }
             : a
         )
       );
@@ -99,30 +94,49 @@ export default function Home() {
           };
         }));
       })
-      .catch(() => {}); // indexer may not be running in dev
+      .catch(() => {});
   }, []);
 
-  useIndexerSocket(onMessage);
+  const wsState = useIndexerSocket(onMessage);
 
   const totalAllocated = agents.reduce((s, a) => s + a.allocationUsdc, 0);
   const liquidReservePct = tvl > 0 ? ((tvl - totalAllocated) / tvl) * 100 : 100;
 
+  const handleDepositPrefill = useCallback(() => {
+    setDepositPrefill(10);
+    setPrefillNonce(n => n + 1);
+    depositRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
   return (
-    <main className="max-w-5xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">
-        Themis{" "}
-        <span className="text-gray-500 font-normal text-lg">· AI Agent Arena on Arc</span>
-      </h1>
-      <TvlBar tvlUsdc={tvl} depositCount={depositCount} />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-6">
-          <AgentLeaderboard agents={agents.map(a => ({ ...a, totalUsdc: tvl }))} />
-          <TracesFeed traces={traces} />
+    <>
+      <DisclaimerBanner />
+      <main className="max-w-5xl mx-auto p-6 space-y-6">
+        <header className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">
+            Themis{" "}
+            <span className="text-gray-500 font-normal text-lg">· AI Agent Arena on Arc</span>
+          </h1>
+        </header>
+
+        <TvlBar tvlUsdc={tvl} depositCount={depositCount} />
+
+        <OnboardingStrip onDepositClick={handleDepositPrefill} />
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-2">
+            <ReasoningTheater traces={traces} wsState={wsState} />
+          </div>
+          <div className="space-y-6">
+            <CompactLeaderboard agents={agents.map(a => ({ ...a, totalUsdc: tvl }))} />
+            <div ref={depositRef}>
+              <DepositPanel liquidReservePct={liquidReservePct} prefilledAmount={depositPrefill} prefillNonce={prefillNonce} />
+            </div>
+          </div>
         </div>
-        <div>
-          <DepositPanel liquidReservePct={liquidReservePct} />
-        </div>
-      </div>
-    </main>
+      </main>
+
+      <ActivityTicker feed={feed} />
+    </>
   );
 }

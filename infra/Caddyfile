@@ -1,0 +1,24 @@
+# Caddy front for the indexer. Caddy auto-issues Let's Encrypt TLS for
+# any domain whose A/AAAA record points at this host.
+#
+# INDEXER_DOMAIN is set by docker-compose (defaults to indexer.local if absent).
+# The indexer serves both REST endpoints and a WebSocket — Caddy's reverse_proxy
+# handles WS upgrade transparently.
+
+{$INDEXER_DOMAIN} {
+	encode zstd gzip
+
+	# Lock down to JSON / WS responses
+	header {
+		Access-Control-Allow-Origin "*"
+		Access-Control-Allow-Methods "GET, POST, OPTIONS"
+		Access-Control-Allow-Headers "Content-Type"
+		-Server
+	}
+
+	# Reverse proxy to the indexer container on the internal network
+	reverse_proxy indexer:3002 {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+	}
+}
