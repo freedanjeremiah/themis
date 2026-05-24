@@ -72,4 +72,22 @@ describe("ThemisVault", () => {
     await expect(vault.connect(user1).deposit(ethers.parseUnits("10", 6)))
       .to.be.revertedWithCustomError(vault, "Paused");
   });
+
+  it("transfers USDC out to agent on allocate", async () => {
+    await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
+    const before = await usdc.balanceOf(allocator.address);
+    await vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("40", 6), 1);
+    const after = await usdc.balanceOf(allocator.address);
+    expect(after - before).to.equal(ethers.parseUnits("40", 6));
+  });
+
+  it("reverts allocate when amount exceeds liquid reserve", async () => {
+    await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
+    // First allocate 80 — leaves 20 liquid.
+    await vault.connect(allocator).allocate(user2.address, ethers.parseUnits("80", 6), 1);
+    // Second allocate of 30 to a different agent exceeds the 20 remaining.
+    await expect(
+      vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("30", 6), 2)
+    ).to.be.revertedWithCustomError(vault, "InsufficientLiquidity");
+  });
 });

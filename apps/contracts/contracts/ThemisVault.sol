@@ -84,10 +84,22 @@ contract ThemisVault {
 
     function allocate(address agent, uint256 amount, uint256 cycleId) external onlyAllocator notPaused {
         require(!agentSidelined[agent], "agent sidelined");
-        totalDeployed = totalDeployed - agentAllocation[agent] + amount;
-        agentAllocation[agent] = amount;
-        _resetDailyIfNeeded(agent);
-        agentDailyDeployed[agent] += amount;
+        // Compute incremental movement: agent already holds `agentAllocation[agent]`.
+        uint256 prev = agentAllocation[agent];
+        if (amount > prev) {
+            uint256 delta = amount - prev;
+            uint256 liquid = liquidReserve();
+            if (delta > liquid) revert InsufficientLiquidity(liquid, delta);
+            totalDeployed += delta;
+            agentAllocation[agent] = amount;
+            _resetDailyIfNeeded(agent);
+            agentDailyDeployed[agent] += delta;
+            usdc.safeTransfer(agent, delta);
+        } else if (amount < prev) {
+            // Allocator is reducing — agent must already have returned the diff via settle/forceSettle.
+            // For Phase 1 we only support upward allocations; revert if asked to reduce.
+            revert("use settle to reduce");
+        } // amount == prev: no-op (still emit event for the cycle marker)
         emit Allocated(agent, amount, cycleId);
     }
 
