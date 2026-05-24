@@ -45,7 +45,7 @@ async function cycle(): Promise<void> {
     console.log(`[hermes] submitted: ${clean.tradeIdea} (conf=${clean.confidence})`);
 
     // Wait briefly for the allocator to score + call vault.allocate, then act.
-    await new Promise(r => setTimeout(r, 30_000));
+    await new Promise(r => setTimeout(r, 70_000));
 
     const { ethers } = await import("ethers");
     const hermesAddress = new ethers.Wallet(process.env.PRIVATE_KEY_HERMES!).address;
@@ -53,16 +53,13 @@ async function cycle(): Promise<void> {
     const allocatedUsd = await readAllocatedUsdc(hermesAddress);
     if (allocatedUsd <= 0) {
       console.log(`[hermes] not allocated this cycle (alloc=${allocatedUsd}); skipping execute`);
-      await reportSettlement("hermes", 0);
       return;
     }
 
     const exec = await executeHermesTrade(clean, allocatedUsd);
     if (!exec.ok) {
-      if (exec.reason === "real_trades_disabled") {
-        await reportSettlement("hermes", 0);
-        return;
-      }
+      if (exec.reason === "real_trades_disabled") return;
+
       console.warn(`[hermes] execute failed: ${exec.reason}`);
       await postStuck("hermes", `execute:${exec.reason}`);
       return;
