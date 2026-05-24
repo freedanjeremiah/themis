@@ -1,11 +1,16 @@
 "use client";
 import { useState, useCallback, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useIndexerSocket } from "../hooks/useIndexerSocket";
 import { TvlBar } from "../components/TvlBar";
 import { AgentLeaderboard } from "../components/AgentLeaderboard";
 import { TracesFeed } from "../components/TracesFeed";
-import { CircleKitDeposit } from "../components/CircleKitDeposit";
 import { WsMessage } from "@themis/shared";
+
+const CircleKitDeposit = dynamic(
+  () => import("../components/CircleKitDeposit").then(m => m.CircleKitDeposit),
+  { ssr: false, loading: () => <div className="bg-gray-900 rounded-lg p-4 border border-gray-700 h-48 animate-pulse" /> }
+);
 
 type AgentRow = {
   agentId: string;

@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const config = {
   reactStrictMode: true,
+  transpilePackages: ["@themis/shared"],
   webpack(webpackConfig) {
     // Stub optional peer deps from wagmi connectors that are not installed
     webpackConfig.resolve.alias = {
