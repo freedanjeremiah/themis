@@ -1,10 +1,14 @@
 "use client";
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { WsMessage } from "@themis/shared";
 
-export function useIndexerSocket(onMessage: (msg: WsMessage) => void) {
+export type WsConnectionState = "connecting" | "open" | "closed";
+
+export function useIndexerSocket(onMessage: (msg: WsMessage) => void): WsConnectionState {
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
+
+  const [connectionState, setConnectionState] = useState<WsConnectionState>("connecting");
 
   const wsRef     = useRef<WebSocket | null>(null);
   const retryRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -13,13 +17,15 @@ export function useIndexerSocket(onMessage: (msg: WsMessage) => void) {
 
   const connect = useCallback(() => {
     if (unmounted.current) return;
+    setConnectionState("connecting");
 
     const url = process.env.NEXT_PUBLIC_INDEXER_WS_URL ?? "ws://localhost:3002";
     const ws  = new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      delayRef.current = 1000; // reset backoff on successful connect
+      delayRef.current = 1000;
+      setConnectionState("open");
     };
 
     ws.onmessage = (e) => {
@@ -32,6 +38,7 @@ export function useIndexerSocket(onMessage: (msg: WsMessage) => void) {
 
     ws.onclose = () => {
       if (unmounted.current) return;
+      setConnectionState("closed");
       const delay = delayRef.current;
       delayRef.current = Math.min(delay * 2, 30_000);
       console.log(`[dashboard] WebSocket closed — reconnecting in ${delay}ms`);
@@ -48,4 +55,6 @@ export function useIndexerSocket(onMessage: (msg: WsMessage) => void) {
       wsRef.current?.close();
     };
   }, [connect]);
+
+  return connectionState;
 }
