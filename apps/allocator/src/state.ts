@@ -1,6 +1,7 @@
 import { AgentId, AgentProposal, AgentState } from "@themis/shared";
 import * as dotenv from "dotenv";
 dotenv.config({ path: "../../.env" });
+import { upsertAgentState, insertPnl, selectAgentState, selectPnlHistory } from "./db.js";
 
 const AGENT_ADDRESSES: Record<AgentId, string> = {
   hermes: process.env.AGENT_ADDRESS_HERMES ?? "",
@@ -17,14 +18,24 @@ if (missingAddresses.length > 0) {
 }
 
 function makeState(agentId: AgentId): AgentState {
+  const row = selectAgentState.get(agentId) as
+    | { trades_completed: number; cumulative_pnl_today: number; last_settle_day: number }
+    | undefined;
+  const history = (selectPnlHistory.all(agentId) as Array<{ ts: number; pnl_usdc6: number }>)
+    .reverse()
+    .map(r => ({ timestamp: r.ts, pnl: r.pnl_usdc6 / 1_000_000 }));
+
+  const todayDay = Math.floor(Date.now() / 86_400_000);
+  const cumulativeToday = row && row.last_settle_day === todayDay ? row.cumulative_pnl_today / 1_000_000 : 0;
+
   return {
     agentId,
     address: AGENT_ADDRESSES[agentId],
-    tradesCompleted: 0,
+    tradesCompleted: row?.trades_completed ?? 0,
     currentAllocationUsd: 0,
-    cumulativePnlToday: 0,
-    pnlHistory: [],
-    sidelined: false,
+    cumulativePnlToday: cumulativeToday,
+    pnlHistory: history,
+    sidelined: false, // sidelined is read live from the vault, not persisted
   };
 }
 
@@ -49,16 +60,20 @@ export const state = {
 
   recordSettlement(agentId: AgentId, pnl: number) {
     const s = agentStates[agentId];
+    const todayDay = Math.floor(Date.now() / 86_400_000);
+    if (s.cumulativePnlToday !== 0 && (s.pnlHistory.at(-1)?.timestamp ?? 0) < todayDay * 86_400_000) {
+      s.cumulativePnlToday = 0;
+    }
     s.tradesCompleted++;
     s.cumulativePnlToday += pnl;
-    s.pnlHistory.push({ timestamp: Date.now(), pnl });
+    const ts = Date.now();
+    s.pnlHistory.push({ timestamp: ts, pnl });
     if (s.pnlHistory.length > 100) s.pnlHistory.shift();
     s.currentAllocationUsd = 0;
-  },
 
-  sidelineAgent(agentId: AgentId) {
-    agentStates[agentId].sidelined = true;
-    agentStates[agentId].currentAllocationUsd = 0;
+    const pnlUsdc6 = Math.round(pnl * 1_000_000);
+    upsertAgentState.run(agentId, s.tradesCompleted, Math.round(s.cumulativePnlToday * 1_000_000), todayDay);
+    insertPnl.run(agentId, ts, pnlUsdc6);
   },
 
   snapshot() {
