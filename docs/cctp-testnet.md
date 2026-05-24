@@ -5,8 +5,12 @@
 | Variable | Value | Source |
 |---|---|---|
 | `ARC_CCTP_DOMAIN` | `26` | Arc testnet domain ID |
-| `HYPERLIQUID_CCTP_DOMAIN` | `19` | _filled in after running `pnpm tsx scripts/verify-cctp-testnet.ts`_ |
-| `MESSAGE_TRANSMITTER_DEST` | `0xE737e5cEBEEBa77EFe34D4aa090756590b1CE275` | _verify against current Circle docs_ |
+| `HYPERLIQUID_CCTP_DOMAIN` | `19` | HyperEVM testnet domain ID |
+| `CCTP_TOKEN_MESSENGER` | `0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA` | Arc testnet TokenMessengerV2 |
+| `MESSAGE_TRANSMITTER_DEST` | `0xE737e5cEBEEBa77EFe34D4aa090756590b1CE275` | HyperEVM testnet MessageTransmitterV2 |
+| `CCTP_TOKEN_MESSENGER_HL` | `0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA` | HyperEVM testnet TokenMessengerV2 |
+| `MESSAGE_TRANSMITTER_ARC` | `0xE737e5cEBEEBa77EFe34D4aa090756590b1CE275` | Arc testnet MessageTransmitterV2 |
+| `USDC_ADDRESS_HL` | `0x2B3370eE501B4a559b57D449569354196457D8Ab` | HyperEVM testnet USDC |
 | Iris sandbox URL | `https://iris-api-sandbox.circle.com/attestations` | Circle CCTP V2 testnet docs |
 
 ## Observed timings
