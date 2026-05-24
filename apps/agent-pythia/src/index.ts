@@ -1,4 +1,4 @@
-import { fetchNewsHeadlines } from "./data.js";
+import { fetchNewsHeadlines, StaleHeadlinesError } from "./data.js";
 import { reason } from "./reason.js";
 import { anchorTrace } from "./anchor.js";
 import { submitProposal, reportSettlement, postStuck } from "./propose.js";
@@ -27,8 +27,17 @@ async function holdAndClose(position: PythiaPosition, allocatedUsd: number): Pro
 
 async function cycle(): Promise<void> {
   console.log(`[pythia] cycle start ${new Date().toISOString()}`);
+  let news: import("./data.js").NewsItem[];
   try {
-    const news = await fetchNewsHeadlines();
+    news = await fetchNewsHeadlines();
+  } catch (err) {
+    if (err instanceof StaleHeadlinesError) {
+      console.warn(`[pythia] skipping cycle: ${err.message}`);
+      return;
+    }
+    throw err;
+  }
+  try {
     const proposal = await reason(news);
     if (proposal.action === "hold") {
       console.log("[pythia] holding this cycle");
