@@ -33,12 +33,12 @@ export async function reason(data: YieldData[]): Promise<RawProposal> {
     system: SYSTEM,
     messages: [{ role: "user", content: `Available yields:\n${JSON.stringify(data, null, 2)}` }],
   });
-  const text = msg.content[0].type === "text" ? msg.content[0].text : "";
+  const strip = (s: string) => s.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  const text = strip(msg.content[0].type === "text" ? msg.content[0].text : "");
   let parsed: RawProposal;
   try {
     parsed = JSON.parse(text) as RawProposal;
   } catch {
-    // Retry once with correction prompt
     const retry = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1024,
@@ -48,7 +48,7 @@ export async function reason(data: YieldData[]): Promise<RawProposal> {
         { role: "user", content: "Your previous output was not valid JSON — output only valid JSON matching the schema, no other text." },
       ],
     });
-    const retryText = retry.content[0].type === "text" ? retry.content[0].text : "";
+    const retryText = strip(retry.content[0].type === "text" ? retry.content[0].text : "");
     parsed = JSON.parse(retryText) as RawProposal;
   }
   return parsed;

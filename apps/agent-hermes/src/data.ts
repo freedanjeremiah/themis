@@ -5,7 +5,7 @@ dotenv.config({ path: "../../.env" });
 export type FundingEntry = { market: string; fundingRate: number; openInterest: number };
 
 export async function fetchFundingRates(): Promise<FundingEntry[]> {
-  const resp = await axios.post(process.env.HYPERLIQUID_API_URL!, {
+  const resp = await axios.post(process.env.HYPERLIQUID_INFO_URL!, {
     type: "metaAndAssetCtxs",
   });
   const [meta, ctxs] = resp.data as [
