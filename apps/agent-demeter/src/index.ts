@@ -1,9 +1,37 @@
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { fetchYieldRates } from "./data.js";
 import { reason } from "./reason.js";
 import { anchorTrace } from "./anchor.js";
 import { submitProposal, reportSettlement } from "./propose.js";
-import { executeDemeterRotation } from "./execute.js";
+import { depositToVenue, redeemFromVenue } from "./execute.js";
 import { AGENT_CYCLE_MS, DEMETER_HOLD_MS } from "@themis/shared";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SHARES_PATH = join(__dirname, "../.shares-held.json");
+
+type ShareSlot = { venue: string; sharesHeld: string; depositedUsd6: string; openedAt: number };
+
+function readShareSlot(): ShareSlot | null {
+  if (!existsSync(SHARES_PATH)) return null;
+  try { return JSON.parse(readFileSync(SHARES_PATH, "utf8")) as ShareSlot; } catch { return null; }
+}
+function writeShareSlot(slot: ShareSlot | null): void {
+  if (!slot) {
+    try { writeFileSync(SHARES_PATH, "null"); } catch { /* ignore */ }
+    return;
+  }
+  writeFileSync(SHARES_PATH, JSON.stringify(slot));
+}
+
+async function postStuck(reason: string | null): Promise<void> {
+  const url = `${process.env.ALLOCATOR_URL ?? "http://localhost:3001"}/stuck`;
+  await fetch(url, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agentId: "demeter", reason }),
+  }).catch(err => console.warn(`[demeter] postStuck failed:`, err));
+}
 
 async function cycle(): Promise<void> {
   console.log(`[demeter] cycle start ${new Date().toISOString()}`);
@@ -12,9 +40,7 @@ async function cycle(): Promise<void> {
     const proposal = await reason(data);
 
     const { cid, hash } = await anchorTrace(
-      { proposal, data },
-      proposal.tradeIdea,
-      proposal.confidence
+      { proposal, data }, proposal.tradeIdea, proposal.confidence,
     );
 
     const { reasoning, ...clean } = proposal;
@@ -25,22 +51,47 @@ async function cycle(): Promise<void> {
     await submitProposal(clean);
     console.log(`[demeter] submitted: ${clean.tradeIdea}`);
 
-    await executeDemeterRotation(clean, clean.requestedSizeUsd).catch(err =>
-      console.error("[demeter] Execute failed (non-fatal):", err)
-    );
+    // Wait for allocator scoring + vault.allocate
+    await new Promise(r => setTimeout(r, 30_000));
 
-    // Report simulated yield settlement after 45s (yield accrues slower than perp trades)
-    setTimeout(async () => {
-      // Simulate: APY-based yield for the cycle window (1 min ≈ 1/525600 of a year)
-      const apyFraction = clean.confidence * 0.055; // ~5.5% APY scaled by confidence
-      const cycleYieldUsd = clean.requestedSizeUsd * apyFraction / 525_600;
-      await reportSettlement("demeter", cycleYieldUsd).catch(err =>
-        console.error("[demeter] Settlement report failed:", err)
-      );
-      console.log(`[demeter] Yield settlement reported: $${cycleYieldUsd.toFixed(6)} (APY ~${(apyFraction * 100).toFixed(2)}%)`);
-    }, DEMETER_HOLD_MS);
+    const dep = await depositToVenue(clean, clean.requestedSizeUsd);
+    if (!dep.ok) {
+      if (dep.reason === "real_trades_disabled") {
+        await reportSettlement("demeter", 0);
+        return;
+      }
+      await postStuck(`deposit:${dep.reason}`);
+      return;
+    }
+
+    writeShareSlot({
+      venue: dep.venue,
+      sharesHeld: dep.sharesHeld.toString(),
+      depositedUsd6: dep.depositedUsd6.toString(),
+      openedAt: Date.now(),
+    });
+
+    // Hold then redeem.
+    await new Promise(r => setTimeout(r, DEMETER_HOLD_MS));
+
+    const slot = readShareSlot();
+    if (!slot) {
+      await postStuck("shares_slot_missing_on_redeem");
+      return;
+    }
+    const red = await redeemFromVenue(slot.venue, BigInt(slot.sharesHeld), BigInt(slot.depositedUsd6));
+    if (!red.ok) {
+      await postStuck(`redeem:${red.reason}`);
+      return;
+    }
+    writeShareSlot(null);
+
+    const pnlUsd = Number(red.receivedUsd6 - BigInt(slot.depositedUsd6)) / 1_000_000;
+    await reportSettlement("demeter", pnlUsd);
+    console.log(`[demeter] real yield settlement: $${pnlUsd.toFixed(6)} (delta over $${(Number(BigInt(slot.depositedUsd6)) / 1_000_000).toFixed(2)})`);
   } catch (err) {
-    console.error("[demeter] cycle error:", err);
+    console.error(`[demeter] cycle error:`, err);
+    await postStuck(`unhandled:${(err as Error).message?.slice(0, 80) ?? "unknown"}`).catch(() => {});
   }
 }
 

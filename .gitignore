@@ -32,3 +32,6 @@ apps/agent-demeter/demeter-cache.json
 
 # Pythia runtime headline cache
 apps/agent-pythia/.headline-cache.json
+
+# Demeter runtime shares-held slot
+apps/agent-demeter/.shares-held.json
