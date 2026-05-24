@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useAccount,
   useReadContract,
@@ -30,9 +30,20 @@ const vaultConfigured =
   (VAULT_ADDRESS as string) !== "0x0000000000000000000000000000000000000000";
 const WALLET_CAP_USDC = 100; // $100
 
-export function DepositPanel({ liquidReservePct }: { liquidReservePct: number }) {
+export function DepositPanel({
+  liquidReservePct,
+  prefilledAmount,
+}: {
+  liquidReservePct: number;
+  prefilledAmount?: number;
+}) {
   const [tab, setTab] = useState<"deposit" | "withdraw">("deposit");
   const [amount, setAmount] = useState("");
+  useEffect(() => {
+    if (typeof prefilledAmount === "number" && prefilledAmount > 0) {
+      setAmount(String(prefilledAmount));
+    }
+  }, [prefilledAmount]);
   const [step, setStep] = useState<"idle" | "approving" | "depositing" | "withdrawing">("idle");
   const [error, setError] = useState<string | null>(null);
   const { address, isConnected } = useAccount();
