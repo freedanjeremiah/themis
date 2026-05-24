@@ -37,6 +37,7 @@ export type AgentState = {
   cumulativePnlToday: number;
   pnlHistory: { timestamp: number; pnl: number }[];
   sidelined: boolean;
+  stuckReason: string | null;
 };
 
 export type WsMessage = {

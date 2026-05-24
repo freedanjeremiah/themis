@@ -1,7 +1,7 @@
 import { AgentId, AgentProposal, AgentState } from "@themis/shared";
 import * as dotenv from "dotenv";
 dotenv.config({ path: "../../.env" });
-import { upsertAgentState, insertPnl, selectAgentState, selectPnlHistory } from "./db.js";
+import { upsertAgentState, insertPnl, selectAgentState, selectPnlHistory, setStuckReason } from "./db.js";
 
 const AGENT_ADDRESSES: Record<AgentId, string> = {
   hermes: process.env.AGENT_ADDRESS_HERMES ?? "",
@@ -19,7 +19,7 @@ if (missingAddresses.length > 0) {
 
 function makeState(agentId: AgentId): AgentState {
   const row = selectAgentState.get(agentId) as
-    | { trades_completed: number; cumulative_pnl_today: number; last_settle_day: number }
+    | { trades_completed: number; cumulative_pnl_today: number; last_settle_day: number; stuck_reason: string | null }
     | undefined;
   const history = (selectPnlHistory.all(agentId) as Array<{ ts: number; pnl_usdc6: number }>)
     .reverse()
@@ -35,7 +35,8 @@ function makeState(agentId: AgentId): AgentState {
     currentAllocationUsd: 0,
     cumulativePnlToday: cumulativeToday,
     pnlHistory: history,
-    sidelined: false, // sidelined is read live from the vault, not persisted
+    sidelined: false,
+    stuckReason: row?.stuck_reason ?? null,
   };
 }
 
@@ -79,8 +80,18 @@ export const state = {
     s.currentAllocationUsd = 0;
 
     const pnlUsdc6 = Math.round(pnl * 1_000_000);
-    upsertAgentState.run(agentId, s.tradesCompleted, Math.round(s.cumulativePnlToday * 1_000_000), todayDay);
+    upsertAgentState.run(agentId, s.tradesCompleted, Math.round(s.cumulativePnlToday * 1_000_000), todayDay, s.stuckReason);
     insertPnl.run(agentId, ts, pnlUsdc6);
+  },
+
+  markStuck(agentId: AgentId, reason: string) {
+    agentStates[agentId].stuckReason = reason;
+    setStuckReason.run(agentId, reason);
+  },
+
+  clearStuck(agentId: AgentId) {
+    agentStates[agentId].stuckReason = null;
+    setStuckReason.run(agentId, null);
   },
 
   snapshot() {

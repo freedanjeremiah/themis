@@ -29,7 +29,7 @@ export async function runCycle(): Promise<void> {
 
   const agentStates = state.getAllAgentStates();
   const scored = proposals
-    .filter(p => !agentStates[p.agentId].sidelined)
+    .filter(p => !agentStates[p.agentId].sidelined && !agentStates[p.agentId].stuckReason)
     .map(p => ({ proposal: p, s: score(agentStates[p.agentId], p) }))
     .sort((a, b) => b.s - a.s);
 
