@@ -25,7 +25,7 @@ async function main() {
 
   // 3. Deploy TraceAnchor
   const Anchor = await ethers.getContractFactory("TraceAnchor");
-  const anchor = await Anchor.deploy();
+  const anchor = await Anchor.deploy(await registry.getAddress());
   await anchor.waitForDeployment();
   console.log("TraceAnchor:", await anchor.getAddress());
 

@@ -40,7 +40,7 @@ export async function anchorTrace(
   }
 
   try {
-    const tx = await anchorContract.anchor(wallet.address, hash, cid);
+    const tx = await anchorContract.anchor(hash, cid);
     await tx.wait();
   } catch (err) {
     console.error(`[${AGENT_ID}] on-chain anchor failed:`, err);

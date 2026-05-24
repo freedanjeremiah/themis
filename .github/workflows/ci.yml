@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Compile contracts
+        run: pnpm --filter @themis/contracts hardhat compile
+
+      - name: Sync ABIs and assert clean
+        run: |
+          pnpm tsx scripts/sync-abis.ts
+          if ! git diff --exit-code -- packages/shared/src/abis; then
+            echo "::error::Shared ABIs are out of sync with compiled artifacts. Run 'pnpm abis' locally and commit."
+            exit 1
+          fi
+
+      - name: Contract tests
+        run: pnpm --filter @themis/contracts hardhat test
+
+      - name: Allocator tests
+        run: pnpm --filter @themis/allocator vitest run
+
+      - name: Typecheck dashboard
+        run: pnpm --filter @themis/dashboard exec tsc --noEmit

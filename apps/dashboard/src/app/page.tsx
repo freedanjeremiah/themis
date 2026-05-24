@@ -7,8 +7,8 @@ import { AgentLeaderboard } from "../components/AgentLeaderboard";
 import { TracesFeed } from "../components/TracesFeed";
 import { WsMessage } from "@themis/shared";
 
-const CircleKitDeposit = dynamic(
-  () => import("../components/CircleKitDeposit").then(m => m.CircleKitDeposit),
+const DepositPanel = dynamic(
+  () => import("../components/DepositPanel").then(m => m.DepositPanel),
   { ssr: false, loading: () => <div className="bg-gray-900 rounded-lg p-4 border border-gray-700 h-48 animate-pulse" /> }
 );
 
@@ -120,7 +120,7 @@ export default function Home() {
           <TracesFeed traces={traces} />
         </div>
         <div>
-          <CircleKitDeposit liquidReservePct={liquidReservePct} />
+          <DepositPanel liquidReservePct={liquidReservePct} />
         </div>
       </div>
     </main>

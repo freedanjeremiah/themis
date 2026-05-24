@@ -6,6 +6,9 @@
     ".": "./src/index.ts",
     "./abis": "./src/abis/index.ts"
   },
-  "scripts": { "build": "tsc" },
+  "scripts": {
+    "build": "tsc",
+    "postinstall": "node -e \"const p=require('path'),f=require('fs');['ThemisVault','ThemisRegistry','TraceAnchor'].forEach(n=>{const fp=p.join(__dirname,'src/abis',n+'.json');if(!f.existsSync(fp)||f.readFileSync(fp,'utf8').trim()==='[]')console.warn('[shared] '+n+'.json is empty — run \\'pnpm abis\\' from repo root');});\""
+  },
   "devDependencies": { "typescript": "^5.4.0" }
 }

@@ -50,26 +50,108 @@ describe("ThemisVault", () => {
       .to.be.revertedWithCustomError(vault, "InsufficientLiquidity");
   });
 
-  it("updates totalAssets on settle with positive PnL", async () => {
+  it("pulls USDC back on settle with positive PnL", async () => {
     await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
     await vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("50", 6), 1);
-    await usdc.mint(await vault.getAddress(), ethers.parseUnits("5", 6));
+    // Agent (allocator EOA here) made $5: now holds 55, vault holds 50.
+    await usdc.mint(allocator.address, ethers.parseUnits("5", 6));
+    await usdc.connect(allocator).approve(await vault.getAddress(), ethers.MaxUint256);
+
     await vault.connect(allocator).settle(allocator.address, ethers.parseUnits("5", 6));
+
     expect(await vault.totalAssets()).to.equal(ethers.parseUnits("105", 6));
+    expect(await usdc.balanceOf(await vault.getAddress())).to.equal(ethers.parseUnits("105", 6));
+    expect(await vault.agentAllocation(allocator.address)).to.equal(0);
   });
 
-  it("emits AgentSidelined when daily loss cap breached", async () => {
+  it("pulls USDC back on settle with negative PnL and sidelines on >5% loss", async () => {
     await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
     await vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("100", 6), 1);
-    // Lose 6% (> 5% cap)
+    // Agent lost 6: now holds 94, vault holds 0.
+    await usdc.connect(allocator).approve(await vault.getAddress(), ethers.MaxUint256);
+
     await expect(
       vault.connect(allocator).settle(allocator.address, -ethers.parseUnits("6", 6))
     ).to.emit(vault, "AgentSidelined");
+
+    expect(await vault.totalAssets()).to.equal(ethers.parseUnits("94", 6));
+    expect(await usdc.balanceOf(await vault.getAddress())).to.equal(ethers.parseUnits("94", 6));
+    expect(await vault.agentSidelined(allocator.address)).to.equal(true);
+  });
+
+  it("settle with zero PnL still clears allocation without moving funds", async () => {
+    await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
+    await vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("30", 6), 1);
+    await usdc.connect(allocator).approve(await vault.getAddress(), ethers.MaxUint256);
+
+    await vault.connect(allocator).settle(allocator.address, 0);
+
+    expect(await vault.totalAssets()).to.equal(ethers.parseUnits("100", 6));
+    expect(await usdc.balanceOf(await vault.getAddress())).to.equal(ethers.parseUnits("100", 6));
+    expect(await vault.agentAllocation(allocator.address)).to.equal(0);
   });
 
   it("pauses all state-changing functions", async () => {
     await vault.connect(admin).pause();
     await expect(vault.connect(user1).deposit(ethers.parseUnits("10", 6)))
       .to.be.revertedWithCustomError(vault, "Paused");
+  });
+
+  it("transfers USDC out to agent on allocate", async () => {
+    await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
+    const before = await usdc.balanceOf(allocator.address);
+    await vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("40", 6), 1);
+    const after = await usdc.balanceOf(allocator.address);
+    expect(after - before).to.equal(ethers.parseUnits("40", 6));
+  });
+
+  it("reverts allocate when amount exceeds liquid reserve", async () => {
+    await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
+    // First allocate 80 — leaves 20 liquid.
+    await vault.connect(allocator).allocate(user2.address, ethers.parseUnits("80", 6), 1);
+    // Second allocate of 30 to a different agent exceeds the 20 remaining.
+    await expect(
+      vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("30", 6), 2)
+    ).to.be.revertedWithCustomError(vault, "InsufficientLiquidity");
+  });
+
+  it("allocate reverts when paused", async () => {
+    await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
+    await vault.connect(admin).pause();
+    await expect(
+      vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("10", 6), 1)
+    ).to.be.revertedWithCustomError(vault, "Paused");
+  });
+
+  it("settle reverts when paused", async () => {
+    await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
+    await vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("10", 6), 1);
+    await usdc.connect(allocator).approve(await vault.getAddress(), ethers.MaxUint256);
+    await vault.connect(admin).pause();
+    await expect(
+      vault.connect(allocator).settle(allocator.address, 0)
+    ).to.be.revertedWithCustomError(vault, "Paused");
+  });
+
+  it("forceSettle works while paused (admin only)", async () => {
+    await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
+    await vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("40", 6), 1);
+    await usdc.connect(allocator).approve(await vault.getAddress(), ethers.MaxUint256);
+    await vault.connect(admin).pause();
+
+    await vault.connect(admin).forceSettle(allocator.address, 0);
+
+    expect(await vault.agentAllocation(allocator.address)).to.equal(0);
+    expect(await usdc.balanceOf(await vault.getAddress())).to.equal(ethers.parseUnits("100", 6));
+  });
+
+  it("forceSettle reverts when called by non-admin", async () => {
+    await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
+    await vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("10", 6), 1);
+    await usdc.connect(allocator).approve(await vault.getAddress(), ethers.MaxUint256);
+    await vault.connect(admin).pause();
+    await expect(
+      vault.connect(allocator).forceSettle(allocator.address, 0)
+    ).to.be.revertedWithCustomError(vault, "NotAdmin");
   });
 });

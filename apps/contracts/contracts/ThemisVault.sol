@@ -84,16 +84,37 @@ contract ThemisVault {
 
     function allocate(address agent, uint256 amount, uint256 cycleId) external onlyAllocator notPaused {
         require(!agentSidelined[agent], "agent sidelined");
-        totalDeployed = totalDeployed - agentAllocation[agent] + amount;
-        agentAllocation[agent] = amount;
-        _resetDailyIfNeeded(agent);
-        agentDailyDeployed[agent] += amount;
+        // Compute incremental movement: agent already holds `agentAllocation[agent]`.
+        uint256 prev = agentAllocation[agent];
+        if (amount > prev) {
+            uint256 delta = amount - prev;
+            uint256 liquid = liquidReserve();
+            if (delta > liquid) revert InsufficientLiquidity(liquid, delta);
+            totalDeployed += delta;
+            agentAllocation[agent] = amount;
+            _resetDailyIfNeeded(agent);
+            agentDailyDeployed[agent] += delta;
+            usdc.safeTransfer(agent, delta);
+        } else if (amount < prev) {
+            // Allocator is reducing — agent must already have returned the diff via settle/forceSettle.
+            // For Phase 1 we only support upward allocations; revert if asked to reduce.
+            revert("use settle to reduce");
+        } // amount == prev: no-op (still emit event for the cycle marker)
         emit Allocated(agent, amount, cycleId);
     }
 
-    function settle(address agent, int256 pnl) external onlyAllocator {
+    function settle(address agent, int256 pnl) external onlyAllocator notPaused {
         _resetDailyIfNeeded(agent);
         agentDailyPnl[agent] += pnl;
+
+        uint256 allocated = agentAllocation[agent];
+        // Net asset change = pnl. Agent returns allocated + pnl.
+        int256 returnInt = int256(allocated) + pnl;
+        require(returnInt >= 0, "agent owes more than allocation");
+        uint256 returnAmt = uint256(returnInt);
+        if (returnAmt > 0) {
+            usdc.safeTransferFrom(agent, address(this), returnAmt);
+        }
 
         if (pnl >= 0) {
             totalAssets += uint256(pnl);
@@ -102,8 +123,7 @@ contract ThemisVault {
             totalAssets = totalAssets > loss ? totalAssets - loss : 0;
         }
 
-        totalDeployed = totalDeployed > agentAllocation[agent]
-            ? totalDeployed - agentAllocation[agent] : 0;
+        totalDeployed = totalDeployed > allocated ? totalDeployed - allocated : 0;
         agentAllocation[agent] = 0;
 
         uint256 basis = agentDailyDeployed[agent];
@@ -114,6 +134,33 @@ contract ThemisVault {
                 emit AgentSidelined(agent, agentDailyPnl[agent]);
             }
         }
+
+        emit Settled(agent, pnl, totalAssets);
+    }
+
+    /// Admin-only wind-down path. Same accounting as settle() but callable while paused.
+    /// Pulls agent's funds back, never sidelines (admin is presumed to handle that manually).
+    function forceSettle(address agent, int256 pnl) external onlyAdmin {
+        _resetDailyIfNeeded(agent);
+        agentDailyPnl[agent] += pnl;
+
+        uint256 allocated = agentAllocation[agent];
+        int256 returnInt = int256(allocated) + pnl;
+        require(returnInt >= 0, "agent owes more than allocation");
+        uint256 returnAmt = uint256(returnInt);
+        if (returnAmt > 0) {
+            usdc.safeTransferFrom(agent, address(this), returnAmt);
+        }
+
+        if (pnl >= 0) {
+            totalAssets += uint256(pnl);
+        } else {
+            uint256 loss = uint256(-pnl);
+            totalAssets = totalAssets > loss ? totalAssets - loss : 0;
+        }
+
+        totalDeployed = totalDeployed > allocated ? totalDeployed - allocated : 0;
+        agentAllocation[agent] = 0;
 
         emit Settled(agent, pnl, totalAssets);
     }
