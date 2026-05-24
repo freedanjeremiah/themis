@@ -29,7 +29,7 @@ export async function executePythiaTrade(
   allocatedUsd: number,
 ): Promise<ExecuteResult> {
   if (!ENABLE_REAL_TRADES) {
-    console.log(`[pythia] CCTP bridge skipped (ENABLE_REAL_TRADES=false): would trade ${allocatedUsd} USDC for ${proposal.tradeIdea}`);
+    console.log(`[pythia] trade skipped (ENABLE_REAL_TRADES=false): would trade ${allocatedUsd} USDC for ${proposal.tradeIdea}`);
     return { ok: false, reason: "real_trades_disabled" };
   }
 

@@ -10,6 +10,7 @@ const baseState: AgentState = {
   cumulativePnlToday: 0,
   pnlHistory: [],
   sidelined: false,
+  stuckReason: null,
 };
 
 const baseProposal: AgentProposal = {

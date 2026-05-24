@@ -1,10 +1,26 @@
 /**
- * Deploys ThemisVault, ThemisRegistry, and TraceAnchor to Arc testnet.
- * Run: pnpm hardhat run scripts/deploy.ts --network arc
+ * Deploys ThemisVault, ThemisRegistry, and TraceAnchor (fresh, current ABI) to
+ * Arc testnet, registers the three agents, and writes the resulting addresses
+ * into .env and apps/dashboard/.env.local automatically.
  *
- * After running, paste the printed addresses into .env.
+ * Run: cd apps/contracts && pnpm hardhat run ../../scripts/deploy.ts --network arc
  */
 import { ethers } from "hardhat";
+import { readFileSync, writeFileSync, existsSync } from "fs";
+import { join } from "path";
+
+const REPO_ROOT = join(__dirname, "..");
+
+/** Upsert KEY=value lines in an env file: replace existing keys, append missing ones. */
+function upsertEnv(filePath: string, kv: Record<string, string>): void {
+  const lines = existsSync(filePath) ? readFileSync(filePath, "utf8").replace(/\n$/, "").split("\n") : [];
+  for (const [key, value] of Object.entries(kv)) {
+    const idx = lines.findIndex(l => l.replace(/^#\s*/, "").startsWith(`${key}=`));
+    if (idx >= 0) lines[idx] = `${key}=${value}`;
+    else lines.push(`${key}=${value}`);
+  }
+  writeFileSync(filePath, lines.join("\n") + "\n");
+}
 
 async function main() {
   const [deployer] = await ethers.getSigners();
@@ -45,7 +61,7 @@ async function main() {
   const registryAddress = await registry.getAddress();
   console.log("ThemisRegistry deployed:", registryAddress);
 
-  // 3. TraceAnchor
+  // 3. TraceAnchor (registry-gated, current ABI)
   const Anchor = await ethers.getContractFactory("TraceAnchor");
   const anchor = await Anchor.deploy(await registry.getAddress());
   await anchor.waitForDeployment();
@@ -54,25 +70,27 @@ async function main() {
 
   // 4. Register agents in ThemisRegistry
   console.log("\nRegistering agents...");
-  let tx = await registry.registerAgent(hermes);
-  await tx.wait();
-  console.log("  Registered Hermes:", hermes);
+  for (const [name, addr] of [["Hermes", hermes], ["Pythia", pythia], ["Demeter", demeter]] as const) {
+    const tx = await registry.registerAgent(addr);
+    await tx.wait();
+    console.log(`  Registered ${name}: ${addr}`);
+  }
 
-  tx = await registry.registerAgent(pythia);
-  await tx.wait();
-  console.log("  Registered Pythia:", pythia);
+  // 5. Write addresses into .env and apps/dashboard/.env.local
+  const rootEnv = join(REPO_ROOT, ".env");
+  upsertEnv(rootEnv, {
+    VAULT_ADDRESS: vaultAddress,
+    NEXT_PUBLIC_VAULT_ADDRESS: vaultAddress,
+    REGISTRY_ADDRESS: registryAddress,
+    ANCHOR_ADDRESS: anchorAddress,
+  });
+  console.log(`\nWrote addresses to ${rootEnv}`);
 
-  tx = await registry.registerAgent(demeter);
-  await tx.wait();
-  console.log("  Registered Demeter:", demeter);
+  const dashEnv = join(REPO_ROOT, "apps/dashboard/.env.local");
+  upsertEnv(dashEnv, { NEXT_PUBLIC_VAULT_ADDRESS: vaultAddress });
+  console.log(`Wrote NEXT_PUBLIC_VAULT_ADDRESS to ${dashEnv}`);
 
-  // Print .env lines
-  console.log("\n--- Paste into .env ---");
-  console.log(`VAULT_ADDRESS=${vaultAddress}`);
-  console.log(`NEXT_PUBLIC_VAULT_ADDRESS=${vaultAddress}`);
-  console.log(`REGISTRY_ADDRESS=${registryAddress}`);
-  console.log(`ANCHOR_ADDRESS=${anchorAddress}`);
-  console.log("--- End ---");
+  console.log("\nDeploy complete. Next: pnpm tsx scripts/preflight.ts");
 }
 
 main().catch(err => {

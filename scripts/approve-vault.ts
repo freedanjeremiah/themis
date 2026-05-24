@@ -4,8 +4,7 @@
  *
  * Usage:
  *   pnpm tsx scripts/approve-vault.ts hermes
- *   pnpm tsx scripts/approve-vault.ts pythia
- *   pnpm tsx scripts/approve-vault.ts demeter
+ *   pnpm tsx scripts/approve-vault.ts all      # approve all three at once
  */
 import { ethers } from "ethers";
 import * as dotenv from "dotenv";
@@ -23,34 +22,41 @@ const AGENT_KEYS = {
 } as const;
 type AgentId = keyof typeof AGENT_KEYS;
 
-async function main() {
-  const agentArg = process.argv[2] as AgentId | undefined;
-  if (!agentArg || !(agentArg in AGENT_KEYS)) {
-    console.error("Usage: pnpm tsx scripts/approve-vault.ts <hermes|pythia|demeter>");
-    process.exit(1);
-  }
-  const pk = process.env[AGENT_KEYS[agentArg]];
-  const vaultAddr = process.env.VAULT_ADDRESS;
-  const usdcAddr = process.env.USDC_ADDRESS;
-  const rpc = process.env.ARC_RPC_URL;
-  if (!pk || !vaultAddr || !usdcAddr || !rpc) {
-    throw new Error("Missing env: PRIVATE_KEY_<AGENT>, VAULT_ADDRESS, USDC_ADDRESS, ARC_RPC_URL");
-  }
-
-  const provider = new ethers.JsonRpcProvider(rpc);
+async function approveOne(agent: AgentId, provider: ethers.JsonRpcProvider, vaultAddr: string, usdcAddr: string) {
+  const pk = process.env[AGENT_KEYS[agent]];
+  if (!pk) throw new Error(`Missing ${AGENT_KEYS[agent]}`);
   const wallet = new ethers.Wallet(pk, provider);
   const usdc = new ethers.Contract(usdcAddr, ERC20_ABI, wallet);
 
   const current = await usdc.allowance(wallet.address, vaultAddr);
   if (current === ethers.MaxUint256) {
-    console.log(`[approve-vault] ${agentArg} ${wallet.address} already has max allowance`);
+    console.log(`[approve-vault] ${agent} ${wallet.address} already has max allowance`);
     return;
   }
-
   const tx = await usdc.approve(vaultAddr, ethers.MaxUint256);
-  console.log(`[approve-vault] ${agentArg} approving vault, tx ${tx.hash}`);
+  console.log(`[approve-vault] ${agent} approving vault, tx ${tx.hash}`);
   await tx.wait();
-  console.log(`[approve-vault] ${agentArg} approved.`);
+  console.log(`[approve-vault] ${agent} approved.`);
+}
+
+async function main() {
+  const arg = process.argv[2];
+  if (!arg || (arg !== "all" && !(arg in AGENT_KEYS))) {
+    console.error("Usage: pnpm tsx scripts/approve-vault.ts <hermes|pythia|demeter|all>");
+    process.exit(1);
+  }
+  const vaultAddr = process.env.VAULT_ADDRESS;
+  const usdcAddr = process.env.USDC_ADDRESS;
+  const rpc = process.env.ARC_RPC_URL;
+  if (!vaultAddr || !usdcAddr || !rpc) {
+    throw new Error("Missing env: VAULT_ADDRESS, USDC_ADDRESS, ARC_RPC_URL");
+  }
+  const provider = new ethers.JsonRpcProvider(rpc);
+
+  const agents: AgentId[] = arg === "all" ? (Object.keys(AGENT_KEYS) as AgentId[]) : [arg as AgentId];
+  for (const agent of agents) {
+    await approveOne(agent, provider, vaultAddr, usdcAddr);
+  }
 }
 
 main().catch(err => { console.error(err); process.exit(1); });

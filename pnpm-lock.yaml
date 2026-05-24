@@ -251,8 +251,8 @@ importers:
   packages/shared:
     devDependencies:
       '@types/node':
-        specifier: ^25.9.1
-        version: 25.9.1
+        specifier: ^22.7.5
+        version: 22.7.5
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
@@ -7335,12 +7335,12 @@ snapshots:
 
   '@types/bn.js@5.2.0':
     dependencies:
-      '@types/node': 25.9.1
+      '@types/node': 22.7.5
 
   '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 25.9.1
+      '@types/node': 22.7.5
 
   '@types/chai-as-promised@7.1.8':
     dependencies:
@@ -7350,11 +7350,11 @@ snapshots:
 
   '@types/concat-stream@1.6.1':
     dependencies:
-      '@types/node': 25.9.1
+      '@types/node': 22.7.5
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 25.9.1
+      '@types/node': 22.7.5
 
   '@types/d3-array@3.2.2': {}
 
@@ -7390,7 +7390,7 @@ snapshots:
 
   '@types/express-serve-static-core@4.19.8':
     dependencies:
-      '@types/node': 25.9.1
+      '@types/node': 22.7.5
       '@types/qs': 6.15.1
       '@types/range-parser': 1.2.7
       '@types/send': 1.2.1
@@ -7404,12 +7404,12 @@ snapshots:
 
   '@types/form-data@0.0.33':
     dependencies:
-      '@types/node': 25.9.1
+      '@types/node': 22.7.5
 
   '@types/glob@7.2.0':
     dependencies:
       '@types/minimatch': 6.0.0
-      '@types/node': 25.9.1
+      '@types/node': 22.7.5
 
   '@types/http-errors@2.0.5': {}
 
@@ -7427,7 +7427,7 @@ snapshots:
 
   '@types/node-fetch@2.6.13':
     dependencies:
-      '@types/node': 25.9.1
+      '@types/node': 22.7.5
       form-data: 4.0.5
 
   '@types/node@10.17.60': {}
@@ -7448,7 +7448,7 @@ snapshots:
 
   '@types/pbkdf2@3.1.2':
     dependencies:
-      '@types/node': 25.9.1
+      '@types/node': 22.7.5
 
   '@types/prettier@2.7.3': {}
 
@@ -7469,21 +7469,21 @@ snapshots:
 
   '@types/secp256k1@4.0.7':
     dependencies:
-      '@types/node': 25.9.1
+      '@types/node': 22.7.5
 
   '@types/send@0.17.6':
     dependencies:
       '@types/mime': 1.3.5
-      '@types/node': 25.9.1
+      '@types/node': 22.7.5
 
   '@types/send@1.2.1':
     dependencies:
-      '@types/node': 25.9.1
+      '@types/node': 22.7.5
 
   '@types/serve-static@1.15.10':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 25.9.1
+      '@types/node': 22.7.5
       '@types/send': 0.17.6
 
   '@types/trusted-types@2.0.7': {}
