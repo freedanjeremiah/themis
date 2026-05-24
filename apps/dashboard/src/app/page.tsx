@@ -9,7 +9,7 @@ import { ActivityTicker } from "../components/ActivityTicker";
 import { OnboardingStrip } from "../components/OnboardingStrip";
 import { DisclaimerBanner } from "../components/DisclaimerBanner";
 import { type TraceItem } from "../components/TraceCard";
-import { WsMessage } from "@themis/shared";
+import type { WsMessage } from "@themis/shared";
 
 const DepositPanel = dynamic(
   () => import("../components/DepositPanel").then(m => m.DepositPanel),
@@ -40,6 +40,7 @@ export default function Home() {
   const [traces, setTraces] = useState<TraceItem[]>([]);
   const [feed, setFeed] = useState<WsMessage[]>([]);
   const [depositPrefill, setDepositPrefill] = useState<number | undefined>(undefined);
+  const [prefillNonce, setPrefillNonce] = useState(0);
   const depositRef = useRef<HTMLDivElement | null>(null);
 
   const onMessage = useCallback((msg: WsMessage) => {
@@ -103,6 +104,7 @@ export default function Home() {
 
   const handleDepositPrefill = useCallback(() => {
     setDepositPrefill(10);
+    setPrefillNonce(n => n + 1);
     depositRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, []);
 
@@ -128,7 +130,7 @@ export default function Home() {
           <div className="space-y-6">
             <CompactLeaderboard agents={agents.map(a => ({ ...a, totalUsdc: tvl }))} />
             <div ref={depositRef}>
-              <DepositPanel liquidReservePct={liquidReservePct} prefilledAmount={depositPrefill} />
+              <DepositPanel liquidReservePct={liquidReservePct} prefilledAmount={depositPrefill} prefillNonce={prefillNonce} />
             </div>
           </div>
         </div>

@@ -73,12 +73,12 @@ export function OnboardingStrip({
         {STEPS.map((s, i) => (
           <span key={s.id} className="flex items-center gap-3">
             <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold border
-              ${s.id < step ? "bg-green-700 border-green-500 text-white"
-                : s.id === step ? "bg-blue-700 border-blue-400 text-white"
+              ${s.id <= step ? "bg-green-700 border-green-500 text-white"
+                : s.id === step + 1 ? "bg-blue-700 border-blue-400 text-white"
                 : "bg-gray-800 border-gray-600 text-gray-500"}`}>
-              {s.id < step ? "✓" : s.id}
+              {s.id <= step ? "✓" : s.id}
             </span>
-            <span className={s.id <= step ? "text-white" : "text-gray-500"}>{s.label}</span>
+            <span className={s.id <= step + 1 ? "text-white" : "text-gray-500"}>{s.label}</span>
             {i < STEPS.length - 1 && <span className="text-gray-600">→</span>}
           </span>
         ))}
