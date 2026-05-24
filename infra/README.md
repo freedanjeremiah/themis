@@ -82,17 +82,27 @@ The dashboard at `https://<your-vercel-domain>` should immediately show TVL + (e
 | Tail one service | `docker compose logs -f --tail 100 <service>` |
 | Tail everything | `docker compose logs -f --tail 30` |
 
-## Reverse-bridge gotcha
+## Soak-test reality (CCTP is bypassed)
 
-Hermes and Pythia stay stuck after their first cycle if any of these env vars are empty:
+After deadline-pressure soak testing, the agents **skip CCTP entirely** and trade against pre-funded HL testnet wallets. The reverse-bridge env vars (`CCTP_TOKEN_MESSENGER_HL`, `MESSAGE_TRANSMITTER_ARC`, `USDC_ADDRESS_HL`) are ignored in the live path — leave them blank. See `docs/session-log-2026-05-24.md` and CLAUDE.md trap #5 for the full story.
 
-- `CCTP_TOKEN_MESSENGER_HL`
-- `MESSAGE_TRANSMITTER_ARC`
-- `USDC_ADDRESS_HL`
+What this means for operators:
 
-Run `pnpm tsx scripts/verify-cctp-testnet.ts` against your testnet wallet ONCE before bringing up agents in real-trades mode. See `docs/cctp-testnet.md`.
+- Before first bring-up, fund each of `AGENT_ADDRESS_HERMES` / `_PYTHIA` / `_DEMETER` with USDC on HyperEVM testnet (chain 998). $50 each is plenty for a 24-hour soak.
+- HL perp fills are **simulated at mark price** (no HL L1 margin deposit). PnL = real price movement over the hold window, no fees, no slippage.
+- USYC Teller rejects deposits on testnet (KYC-gated). Demeter falls back to a 5.2%-APY simulated model.
+- `ENABLE_REAL_TRADES=false` keeps everything as a dry-run — agents log intended actions, report $0 settlement.
 
-To start in dry-run mode (no real trades, no real CCTP), keep `ENABLE_REAL_TRADES=false` in `.env` (the default). The agents log every cycle's intended actions and report $0 settlement — useful for testing the pipeline shape before exposing real testnet capital.
+When a cycle goes wrong (tsx --watch restart, network blip, stale allocation), manually force-settle via the allocator:
+```bash
+docker compose exec allocator wget -qO- --post-data='{"agentId":"hermes","pnlUsd":0}' \
+  --header='Content-Type: application/json' http://localhost:3001/settle
+```
+
+Inspect live vault state with:
+```bash
+docker compose exec agent-hermes pnpm tsx /app/scripts/vault-state.ts
+```
 
 ## Security notes
 
