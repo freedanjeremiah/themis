@@ -16,7 +16,8 @@ db.exec(`
     agent_id TEXT PRIMARY KEY,
     trades_completed INTEGER NOT NULL DEFAULT 0,
     cumulative_pnl_today INTEGER NOT NULL DEFAULT 0,
-    last_settle_day INTEGER NOT NULL DEFAULT 0
+    last_settle_day INTEGER NOT NULL DEFAULT 0,
+    stuck_reason TEXT
   );
   CREATE TABLE IF NOT EXISTS pnl_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,13 +28,17 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_pnl_agent ON pnl_history(agent_id, ts);
 `);
 
+// Idempotent migration for pre-Phase-2 DBs:
+try { db.exec("ALTER TABLE agent_state ADD COLUMN stuck_reason TEXT"); } catch { /* already exists */ }
+
 export const upsertAgentState = db.prepare(`
-  INSERT INTO agent_state (agent_id, trades_completed, cumulative_pnl_today, last_settle_day)
-  VALUES (?, ?, ?, ?)
+  INSERT INTO agent_state (agent_id, trades_completed, cumulative_pnl_today, last_settle_day, stuck_reason)
+  VALUES (?, ?, ?, ?, ?)
   ON CONFLICT(agent_id) DO UPDATE SET
     trades_completed = excluded.trades_completed,
     cumulative_pnl_today = excluded.cumulative_pnl_today,
-    last_settle_day = excluded.last_settle_day
+    last_settle_day = excluded.last_settle_day,
+    stuck_reason = excluded.stuck_reason
 `);
 
 export const insertPnl = db.prepare(`
@@ -41,9 +46,14 @@ export const insertPnl = db.prepare(`
 `);
 
 export const selectAgentState = db.prepare(`
-  SELECT trades_completed, cumulative_pnl_today, last_settle_day FROM agent_state WHERE agent_id = ?
+  SELECT trades_completed, cumulative_pnl_today, last_settle_day, stuck_reason FROM agent_state WHERE agent_id = ?
 `);
 
 export const selectPnlHistory = db.prepare(`
   SELECT ts, pnl_usdc6 FROM pnl_history WHERE agent_id = ? ORDER BY ts DESC LIMIT 100
+`);
+
+export const setStuckReason = db.prepare(`
+  INSERT INTO agent_state (agent_id, stuck_reason) VALUES (?, ?)
+  ON CONFLICT(agent_id) DO UPDATE SET stuck_reason = excluded.stuck_reason
 `);

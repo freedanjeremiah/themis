@@ -1,185 +1,69 @@
 /**
- * Execute a Pythia trade: bridge USDC from Arc to Hyperliquid via CCTP,
- * then place a perp order on Hyperliquid.
- * Gated by ENABLE_REAL_TRADES=true. Off by default for safety.
+ * Execute a Pythia trade:
+ *   1. Bridge USDC from Arc → HL testnet via CCTP (uses cctp.ts).
+ *   2. Place perp order on HL testnet (uses @themis/hl-client).
  *
- * CCTP flow:
- *   1. Approve USDC to TokenMessenger
- *   2. Call depositForBurn → burns USDC on Arc, emits MessageSent
- *   3. Iris attestation service signs the burn message (~20s)
- *   4. Call receiveMessage on Hyperliquid MessageTransmitter to mint USDC
- *   5. Place perp order on Hyperliquid exchange
+ * Gated by ENABLE_REAL_TRADES=true. Returns null when bridge or order fails,
+ * or when ENABLE_REAL_TRADES is false. The cycle in index.ts handles stuck
+ * reporting and settle.
  */
-import { ethers } from "ethers";
 import { AgentProposal } from "@themis/shared";
+import { placeHlOrder } from "@themis/hl-client";
+import { bridgeArcToHl } from "./cctp.js";
 import * as dotenv from "dotenv";
-import { placeHlOrder } from "./hl.js";
 dotenv.config({ path: "../../.env" });
 
 const ENABLE_REAL_TRADES = process.env.ENABLE_REAL_TRADES === "true";
 
-const IRIS_API = "https://iris-api-sandbox.circle.com/attestations";
-const MESSAGE_TRANSMITTER_ABI = [
-  { name: "receiveMessage", type: "function", stateMutability: "nonpayable",
-    inputs: [{ name: "message", type: "bytes" }, { name: "attestation", type: "bytes" }],
-    outputs: [{ name: "success", type: "bool" }] },
-] as const;
+export type PythiaPosition = {
+  fillPrice: number;
+  coin: string;
+  sizeInCoins: number;
+  szDecimals: number;
+  isBuy: boolean;
+};
 
-const CCTP_TOKEN_MESSENGER_ABI = [
-  {
-    name: "depositForBurn",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "amount", type: "uint256" },
-      { name: "destinationDomain", type: "uint32" },
-      { name: "mintRecipient", type: "bytes32" },
-      { name: "burnToken", type: "address" },
-    ],
-    outputs: [{ name: "nonce", type: "uint64" }],
-  },
-] as const;
+export type ExecuteResult =
+  | { ok: true; position: PythiaPosition }
+  | { ok: false; reason: string; burnTxHash?: string };
 
-const ERC20_ABI = [
-  {
-    name: "approve",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "spender", type: "address" },
-      { name: "amount", type: "uint256" },
-    ],
-    outputs: [{ name: "", type: "bool" }],
-  },
-] as const;
-
-const USDC_ADDRESS            = process.env.USDC_ADDRESS ?? "0x3600000000000000000000000000000000000000";
-const CCTP_TOKEN_MESSENGER    = process.env.CCTP_TOKEN_MESSENGER ?? "";
-const HYPERLIQUID_CCTP_DOMAIN = Number(process.env.HYPERLIQUID_CCTP_DOMAIN ?? "0");
-
-async function pollIrisAttestation(messageHash: string): Promise<string | null> {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    await new Promise(r => setTimeout(r, 5_000));
-    try {
-      const resp = await fetch(`${IRIS_API}/${messageHash}`);
-      if (!resp.ok) continue;
-      const data = await resp.json() as { status: string; attestation?: string };
-      if (data.status === "complete" && data.attestation) {
-        return data.attestation;
-      }
-      console.log(`[pythia] Iris attestation pending (attempt ${attempt + 1}/20)…`);
-    } catch {
-      // transient fetch error — retry
-    }
-  }
-  console.warn("[pythia] Iris attestation timed out after 100s");
-  return null;
-}
-
-/**
- * Convert an EVM address to bytes32 (left zero-padded to 32 bytes).
- * CCTP mintRecipient must be 32 bytes.
- */
-function addressToBytes32(address: string): string {
-  return "0x" + address.slice(2).toLowerCase().padStart(64, "0");
-}
-
-/**
- * Execute a winning Pythia proposal by bridging USDC to Hyperliquid via CCTP.
- * Returns position info when a real trade fills, null otherwise.
- * No-op when ENABLE_REAL_TRADES=false (logs intent only).
- */
 export async function executePythiaTrade(
   proposal: AgentProposal,
-  allocatedUsd: number
-): Promise<{ fillPrice: number | null; coin: string; sizeInCoins: number; szDecimals: number; isBuy: boolean } | null> {
-  const amountUsdc6 = BigInt(Math.floor(allocatedUsd * 1_000_000));
-
+  allocatedUsd: number,
+): Promise<ExecuteResult> {
   if (!ENABLE_REAL_TRADES) {
-    console.log(
-      `[pythia] CCTP bridge skipped (ENABLE_REAL_TRADES=false): would burn ${allocatedUsd} USDC on Arc` +
-      ` → mint on Hyperliquid (domain ${HYPERLIQUID_CCTP_DOMAIN}) for: ${proposal.tradeIdea}`
-    );
-    return null;
+    console.log(`[pythia] CCTP bridge skipped (ENABLE_REAL_TRADES=false): would trade ${allocatedUsd} USDC for ${proposal.tradeIdea}`);
+    return { ok: false, reason: "real_trades_disabled" };
   }
 
-  if (!CCTP_TOKEN_MESSENGER) {
-    console.warn("[pythia] CCTP_TOKEN_MESSENGER not set — skipping CCTP bridge");
-    return null;
+  const amountUsdc6 = BigInt(Math.floor(allocatedUsd * 1_000_000));
+  const bridge = await bridgeArcToHl(amountUsdc6);
+  if (bridge.status !== "complete") {
+    return { ok: false, reason: bridge.status, burnTxHash: bridge.burnTxHash };
   }
 
-  const provider = new ethers.JsonRpcProvider(process.env.ARC_RPC_URL!);
-  const wallet   = new ethers.Wallet(process.env.PRIVATE_KEY_PYTHIA!, provider);
-
-  // Step 1: Approve USDC to TokenMessenger
-  const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, wallet);
-  const approveTx = await usdc.approve(CCTP_TOKEN_MESSENGER, amountUsdc6);
-  await approveTx.wait();
-  console.log(`[pythia] USDC approved to TokenMessenger (${allocatedUsd} USDC)`);
-
-  // Step 2: depositForBurn — burns USDC on Arc, triggers Iris attestation
-  const messenger = new ethers.Contract(CCTP_TOKEN_MESSENGER, CCTP_TOKEN_MESSENGER_ABI, wallet);
-  const mintRecipient = addressToBytes32(wallet.address); // Pythia wallet receives on destination
-  const burnTx = await messenger.depositForBurn(
-    amountUsdc6,
-    HYPERLIQUID_CCTP_DOMAIN,
-    mintRecipient,
-    USDC_ADDRESS
-  );
-  const receipt = await burnTx.wait();
-  console.log(`[pythia] CCTP depositForBurn confirmed (tx: ${receipt?.hash})`);
-
-  // Extract MessageSent log to get the message bytes and hash
-  const messageSentLog = (receipt?.logs as ethers.Log[])?.find(
-    (log: ethers.Log) => log.topics[0] === ethers.id("MessageSent(bytes)")
-  );
-  if (!messageSentLog) {
-    console.warn("[pythia] Could not find MessageSent log — attestation skipped");
+  const order = await placeHlOrder(
+    process.env.PRIVATE_KEY_PYTHIA!,
+    proposal,
+    allocatedUsd,
+    "pythia",
+  ).catch(err => {
+    console.warn(`[pythia] HL order placement failed:`, err);
     return null;
+  });
+
+  if (!order || order.fillPrice === null) {
+    return { ok: false, reason: "hl_order_unfilled" };
   }
 
-  // The message is in the log data (ABI-encoded bytes)
-  const messageBytes = ethers.AbiCoder.defaultAbiCoder().decode(["bytes"], messageSentLog.data)[0] as string;
-  const messageHash  = ethers.keccak256(messageBytes);
-
-  console.log(`[pythia] Polling Iris for attestation (hash: ${messageHash.slice(0, 12)}…)`);
-  const attestation = await pollIrisAttestation(messageHash);
-  if (!attestation) return null;
-
-  // Step 4: Call receiveMessage on destination (Hyperliquid)
-  const destRpc = process.env.DEST_RPC_URL;
-  const destTransmitter = process.env.MESSAGE_TRANSMITTER_DEST;
-  if (!destRpc || !destTransmitter) {
-    console.warn("[pythia] DEST_RPC_URL or MESSAGE_TRANSMITTER_DEST not set — mint skipped");
-    return null;
-  }
-
-  const destProvider = new ethers.JsonRpcProvider(destRpc);
-  const destWallet   = new ethers.Wallet(process.env.PRIVATE_KEY_PYTHIA!, destProvider);
-  const transmitter  = new ethers.Contract(destTransmitter, MESSAGE_TRANSMITTER_ABI, destWallet);
-  const mintTx = await transmitter.receiveMessage(messageBytes, attestation);
-  const mintReceipt = await mintTx.wait();
-  console.log(`[pythia] CCTP mint complete on destination (tx: ${mintReceipt?.hash})`);
-
-  // Step 5: Place perp order on Hyperliquid (non-fatal — bridge already completed)
-  try {
-    const { orderId, fillPrice, coin, sizeInCoins, szDecimals, isBuy } = await placeHlOrder(
-      process.env.PRIVATE_KEY_PYTHIA!,
-      proposal,
-      allocatedUsd,
-      "pythia"
-    );
-    if (fillPrice !== null) {
-      console.log(`[pythia] HL order filled: avgPx=${fillPrice}`);
-      return { fillPrice, coin, sizeInCoins, szDecimals, isBuy };
-    } else if (orderId !== null) {
-      console.log(`[pythia] HL order resting on book: oid=${orderId}`);
-    } else {
-      console.warn("[pythia] HL order placement returned no fill/resting — check logs above");
-    }
-    return null;
-  } catch (err) {
-    console.warn("[pythia] HL order placement failed (non-fatal):", err);
-    return null;
-  }
+  return {
+    ok: true,
+    position: {
+      fillPrice: order.fillPrice,
+      coin: order.coin,
+      sizeInCoins: order.sizeInCoins,
+      szDecimals: order.szDecimals,
+      isBuy: order.isBuy,
+    },
+  };
 }

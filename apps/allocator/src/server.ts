@@ -44,4 +44,17 @@ app.post("/settle", async (req, res) => {
   }
 });
 
+app.post("/stuck", (req, res) => {
+  const { agentId, reason } = req.body as { agentId: AgentId; reason?: string };
+  if (!agentId) return res.status(400).json({ error: "agentId required" });
+  if (reason === undefined || reason === null) {
+    state.clearStuck(agentId);
+    console.log(`[allocator] cleared stuck flag for ${agentId}`);
+  } else {
+    state.markStuck(agentId, reason);
+    console.log(`[allocator] marked ${agentId} stuck: ${reason}`);
+  }
+  res.json({ ok: true });
+});
+
 app.get("/state", (_req, res) => res.json(state.snapshot()));

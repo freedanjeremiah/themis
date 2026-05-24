@@ -1,0 +1,20 @@
+{
+  "name": "@themis/hl-client",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@themis/shared": "workspace:*",
+    "ethers": "^6.11.0",
+    "msgpackr": "^1.10.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

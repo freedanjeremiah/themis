@@ -1,16 +1,44 @@
-import { fetchNewsHeadlines } from "./data.js";
+import { fetchNewsHeadlines, StaleHeadlinesError } from "./data.js";
 import { reason } from "./reason.js";
 import { anchorTrace } from "./anchor.js";
-import { submitProposal, reportSettlement } from "./propose.js";
-import { executePythiaTrade } from "./execute.js";
-import { closeHlPosition } from "./hl.js";
+import { submitProposal, reportSettlement, postStuck } from "./propose.js";
+import { executePythiaTrade, PythiaPosition } from "./execute.js";
+import { closeHlPosition } from "@themis/hl-client";
+import { bridgeHlToArc } from "./cctp.js";
+import { AGENT_CYCLE_MS, PYTHIA_HOLD_MS } from "@themis/shared";
 
-const CYCLE_MS = 60_000;
+async function holdAndClose(position: PythiaPosition, allocatedUsd: number): Promise<number | null> {
+  await new Promise(r => setTimeout(r, PYTHIA_HOLD_MS));
+  const close = await closeHlPosition(
+    process.env.PRIVATE_KEY_PYTHIA!,
+    position.coin,
+    position.sizeInCoins,
+    position.szDecimals,
+    position.isBuy,
+    "pythia",
+  ).catch(err => {
+    console.warn(`[pythia] HL close failed:`, err);
+    return null;
+  });
+  if (!close) return null;
+  const pct = (close.exitPrice - position.fillPrice) / position.fillPrice;
+  return pct * allocatedUsd * (position.isBuy ? 1 : -1);
+}
 
 async function cycle(): Promise<void> {
   console.log(`[pythia] cycle start ${new Date().toISOString()}`);
   try {
-    const news = await fetchNewsHeadlines();
+    let news;
+    try {
+      news = await fetchNewsHeadlines();
+    } catch (err) {
+      if (err instanceof StaleHeadlinesError) {
+        console.warn(`[pythia] skipping cycle: ${err.message}`);
+        return;
+      }
+      throw err;
+    }
+
     const proposal = await reason(news);
     if (proposal.action === "hold") {
       console.log("[pythia] holding this cycle");
@@ -20,7 +48,7 @@ async function cycle(): Promise<void> {
     const { cid, hash } = await anchorTrace(
       { proposal, news },
       proposal.tradeIdea,
-      proposal.confidence
+      proposal.confidence,
     );
 
     const { reasoning, ...clean } = proposal;
@@ -31,47 +59,53 @@ async function cycle(): Promise<void> {
     await submitProposal(clean);
     console.log(`[pythia] submitted: ${clean.tradeIdea}`);
 
-    const position = await executePythiaTrade(clean, clean.requestedSizeUsd).catch(err => {
-      console.error("[pythia] Execute failed (non-fatal):", err);
-      return null;
-    });
+    await new Promise(r => setTimeout(r, 30_000));
 
-    // Settle after 5 minutes — use real HL position PnL if available, otherwise fake
-    const SETTLE_DELAY_MS = position ? 5 * 60_000 : 30_000;
-    setTimeout(async () => {
-      let pnlUsd: number;
-      if (position?.fillPrice) {
-        const close = await closeHlPosition(
-          process.env.PRIVATE_KEY_PYTHIA!,
-          position.coin,
-          position.sizeInCoins,
-          position.szDecimals,
-          position.isBuy,
-          "pythia"
-        ).catch(() => null);
-        if (close) {
-          const pct = (close.exitPrice - position.fillPrice) / position.fillPrice;
-          pnlUsd = pct * clean.requestedSizeUsd * (position.isBuy ? 1 : -1);
-          console.log(`[pythia] Real PnL: entry=${position.fillPrice} exit=${close.exitPrice} pnl=$${pnlUsd.toFixed(4)}`);
-        } else {
-          // Close failed — fall back to fake PnL
-          const direction = Math.random() > 0.4 ? 1 : -1;
-          pnlUsd = direction * clean.confidence * clean.requestedSizeUsd * 0.004;
-        }
-      } else {
-        // No real trade — use fake PnL
-        const direction = clean.action === "hold" ? 0 : (Math.random() > 0.4 ? 1 : -1);
-        pnlUsd = direction * clean.confidence * clean.requestedSizeUsd * 0.004;
+    const { ethers } = await import("ethers");
+    const pythiaAddress = new ethers.Wallet(process.env.PRIVATE_KEY_PYTHIA!).address;
+    const { readAllocatedUsdc } = await import("./vault-read.js");
+    const allocatedUsd = await readAllocatedUsdc(pythiaAddress);
+    if (allocatedUsd <= 0) {
+      console.log(`[pythia] not allocated this cycle (alloc=${allocatedUsd}); skipping execute`);
+      await reportSettlement("pythia", 0);
+      return;
+    }
+
+    const exec = await executePythiaTrade(clean, allocatedUsd);
+    if (!exec.ok) {
+      if (exec.reason === "real_trades_disabled") {
+        await reportSettlement("pythia", 0);
+        return;
       }
-      await reportSettlement("pythia", pnlUsd).catch(err =>
-        console.error("[pythia] Settlement report failed:", err)
-      );
-      console.log(`[pythia] Settlement reported: $${pnlUsd.toFixed(4)}`);
-    }, SETTLE_DELAY_MS);
+      console.warn(`[pythia] execute failed: ${exec.reason} (burn=${exec.burnTxHash ?? "n/a"})`);
+      await postStuck("pythia", `execute:${exec.reason}${exec.burnTxHash ? `:${exec.burnTxHash}` : ""}`);
+      return;
+    }
+
+    const pnlUsd = await holdAndClose(exec.position, allocatedUsd);
+    if (pnlUsd === null) {
+      await postStuck("pythia", "hl_close_failed");
+      return;
+    }
+    console.log(`[pythia] real HL PnL: $${pnlUsd.toFixed(4)}`);
+
+    const proceedsUsd = allocatedUsd + pnlUsd;
+    const proceedsUsd6 = BigInt(Math.max(0, Math.floor(proceedsUsd * 1_000_000)));
+    if (proceedsUsd6 > 0n) {
+      const back = await bridgeHlToArc(proceedsUsd6);
+      if (back.status !== "complete") {
+        await postStuck("pythia", `reverse_bridge:${back.status}:${back.burnTxHash}`);
+        return;
+      }
+    }
+
+    await reportSettlement("pythia", pnlUsd);
+    console.log(`[pythia] settlement reported: $${pnlUsd.toFixed(4)}`);
   } catch (err) {
-    console.error("[pythia] cycle error:", err);
+    console.error(`[pythia] cycle error:`, err);
+    await postStuck("pythia", `unhandled:${(err as Error).message?.slice(0, 80) ?? "unknown"}`).catch(() => {});
   }
 }
 
 cycle();
-setInterval(cycle, CYCLE_MS);
+setInterval(cycle, AGENT_CYCLE_MS);

@@ -37,3 +37,37 @@ describe("allocator state persistence", () => {
     expect(s.cumulativePnlToday).toBeCloseTo(1.0); // 1.5 + (-0.5) = 1.0
   });
 });
+
+describe("allocator stuck-agent tracking", () => {
+  let tmp2: string;
+
+  beforeEach(() => {
+    tmp2 = mkdtempSync(join(tmpdir(), "themis-stuck-"));
+    process.env.ALLOCATOR_DB_PATH = join(tmp2, "state.db");
+    process.env.AGENT_ADDRESS_HERMES = "0x0000000000000000000000000000000000000001";
+    process.env.AGENT_ADDRESS_PYTHIA = "0x0000000000000000000000000000000000000002";
+    process.env.AGENT_ADDRESS_DEMETER = "0x0000000000000000000000000000000000000003";
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    rmSync(tmp2, { recursive: true, force: true });
+  });
+
+  it("markStuck sets reason and clearStuck removes it; persists across re-import", async () => {
+    const mod1 = await import("../src/state.js");
+    mod1.state.markStuck("hermes", "cctp_attestation_timeout");
+    expect(mod1.state.getAgentState("hermes").stuckReason).toBe("cctp_attestation_timeout");
+
+    vi.resetModules();
+    const mod2 = await import("../src/state.js");
+    expect(mod2.state.getAgentState("hermes").stuckReason).toBe("cctp_attestation_timeout");
+
+    mod2.state.clearStuck("hermes");
+    expect(mod2.state.getAgentState("hermes").stuckReason).toBeNull();
+
+    vi.resetModules();
+    const mod3 = await import("../src/state.js");
+    expect(mod3.state.getAgentState("hermes").stuckReason).toBeNull();
+  });
+});
