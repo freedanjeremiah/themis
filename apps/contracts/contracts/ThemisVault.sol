@@ -138,6 +138,32 @@ contract ThemisVault {
         emit Settled(agent, pnl, totalAssets);
     }
 
+    /// Admin-only wind-down path. Same accounting as settle() but callable while paused.
+    /// Pulls agent's funds back, never sidelines (admin is presumed to handle that manually).
+    function forceSettle(address agent, int256 pnl) external onlyAdmin {
+        agentDailyPnl[agent] += pnl;
+
+        uint256 allocated = agentAllocation[agent];
+        int256 returnInt = int256(allocated) + pnl;
+        require(returnInt >= 0, "agent owes more than allocation");
+        uint256 returnAmt = uint256(returnInt);
+        if (returnAmt > 0) {
+            usdc.safeTransferFrom(agent, address(this), returnAmt);
+        }
+
+        if (pnl >= 0) {
+            totalAssets += uint256(pnl);
+        } else {
+            uint256 loss = uint256(-pnl);
+            totalAssets = totalAssets > loss ? totalAssets - loss : 0;
+        }
+
+        totalDeployed = totalDeployed > allocated ? totalDeployed - allocated : 0;
+        agentAllocation[agent] = 0;
+
+        emit Settled(agent, pnl, totalAssets);
+    }
+
     function sidelineAgent(address agent) external onlyAllocator {
         agentSidelined[agent] = true;
         totalDeployed = totalDeployed > agentAllocation[agent]

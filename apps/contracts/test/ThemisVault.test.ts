@@ -114,4 +114,44 @@ describe("ThemisVault", () => {
       vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("30", 6), 2)
     ).to.be.revertedWithCustomError(vault, "InsufficientLiquidity");
   });
+
+  it("allocate reverts when paused", async () => {
+    await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
+    await vault.connect(admin).pause();
+    await expect(
+      vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("10", 6), 1)
+    ).to.be.revertedWithCustomError(vault, "Paused");
+  });
+
+  it("settle reverts when paused", async () => {
+    await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
+    await vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("10", 6), 1);
+    await usdc.connect(allocator).approve(await vault.getAddress(), ethers.MaxUint256);
+    await vault.connect(admin).pause();
+    await expect(
+      vault.connect(allocator).settle(allocator.address, 0)
+    ).to.be.revertedWithCustomError(vault, "Paused");
+  });
+
+  it("forceSettle works while paused (admin only)", async () => {
+    await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
+    await vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("40", 6), 1);
+    await usdc.connect(allocator).approve(await vault.getAddress(), ethers.MaxUint256);
+    await vault.connect(admin).pause();
+
+    await vault.connect(admin).forceSettle(allocator.address, 0);
+
+    expect(await vault.agentAllocation(allocator.address)).to.equal(0);
+    expect(await usdc.balanceOf(await vault.getAddress())).to.equal(ethers.parseUnits("100", 6));
+  });
+
+  it("forceSettle reverts when called by non-admin", async () => {
+    await vault.connect(user1).deposit(ethers.parseUnits("100", 6));
+    await vault.connect(allocator).allocate(allocator.address, ethers.parseUnits("10", 6), 1);
+    await usdc.connect(allocator).approve(await vault.getAddress(), ethers.MaxUint256);
+    await vault.connect(admin).pause();
+    await expect(
+      vault.connect(allocator).forceSettle(allocator.address, 0)
+    ).to.be.revertedWithCustomError(vault, "NotAdmin");
+  });
 });
