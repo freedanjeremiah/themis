@@ -1,9 +1,11 @@
 /**
- * Execute a Demeter yield rotation: deposit USDC into USYC or Aave on Arc.
+ * Execute a Demeter yield rotation: deposit USDC into USYC via the Teller on Arc.
  * Gated by ENABLE_REAL_TRADES=true. Off by default for safety.
  *
- * USYC: ERC-4626 vault — deposit(assets, receiver)
- * Aave v3: supply(asset, amount, onBehalfOf, referralCode)
+ * USYC Teller (0x9fdF14c5B14173D74C08Af27AebFf39240dC105A):
+ *   approve USDC → Teller, then Teller.deposit(assets, receiver)
+ *
+ * Aave v3: not yet deployed on Arc testnet — skipped when AAVE_POOL_ADDRESS unset.
  */
 import { ethers } from "ethers";
 import { AgentProposal } from "@themis/shared";
@@ -12,9 +14,9 @@ dotenv.config({ path: "../../.env" });
 
 const ENABLE_REAL_TRADES = process.env.ENABLE_REAL_TRADES === "true";
 
-const USDC_ADDRESS  = process.env.USDC_ADDRESS ?? "0x3600000000000000000000000000000000000000";
-const USYC_ADDRESS  = process.env.USYC_ADDRESS ?? "";
-const AAVE_POOL     = process.env.AAVE_POOL_ADDRESS ?? "";
+const USDC_ADDRESS        = process.env.USDC_ADDRESS ?? "0x3600000000000000000000000000000000000000";
+const USYC_TELLER_ADDRESS = process.env.USYC_TELLER_ADDRESS ?? "0x9fdF14c5B14173D74C08Af27AebFf39240dC105A";
+const AAVE_POOL           = process.env.AAVE_POOL_ADDRESS ?? "";
 
 const ERC20_ABI = [
   { name: "approve", type: "function", stateMutability: "nonpayable",
@@ -59,16 +61,13 @@ export async function executeDemeterRotation(
   const usdc     = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, wallet);
 
   if (venue === "usyc") {
-    if (!USYC_ADDRESS) {
-      console.warn("[demeter] USYC_ADDRESS not set — skipping deposit");
-      return;
-    }
-    const approveTx = await usdc.approve(USYC_ADDRESS, amountUsdc6);
+    // Approve USDC to the Teller (not the USYC token) then call Teller.deposit()
+    const approveTx = await usdc.approve(USYC_TELLER_ADDRESS, amountUsdc6);
     await approveTx.wait();
-    const usyc = new ethers.Contract(USYC_ADDRESS, USYC_ABI, wallet);
-    const depositTx = await usyc.deposit(amountUsdc6, wallet.address);
+    const teller = new ethers.Contract(USYC_TELLER_ADDRESS, USYC_ABI, wallet);
+    const depositTx = await teller.deposit(amountUsdc6, wallet.address);
     const receipt = await depositTx.wait();
-    console.log(`[demeter] USYC deposit confirmed (tx: ${receipt?.hash})`);
+    console.log(`[demeter] USYC Teller deposit confirmed (tx: ${receipt?.hash})`);
 
   } else if (venue === "aave") {
     if (!AAVE_POOL) {

@@ -15,7 +15,7 @@ Output ONLY valid JSON — no markdown, no text outside JSON:
   "agentId": "demeter",
   "tradeIdea": "<one-sentence: rotate X USDC to [venue] for Y% APY>",
   "action": "rotate",
-  "venue": "usyc" | "aave",
+  "venue": "usyc",
   "requestedSizeUsd": <integer 100-500>,
   "confidence": <float 0.7-0.99>,
   "reasoning": "<compare yields, state why chosen venue is better>",
