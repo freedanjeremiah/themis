@@ -26,7 +26,7 @@ const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)",
 ] as const;
 const TM_ABI = [
-  "function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken) returns (uint64 nonce)",
+  "function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold) returns (uint64 nonce)",
 ] as const;
 const MT_ABI = [
   "function receiveMessage(bytes message, bytes attestation) returns (bool)",
@@ -84,6 +84,9 @@ async function main() {
     arcDomain,
     addressToBytes32(srcWallet.address),
     process.env.USDC_ADDRESS_HL!,
+    ethers.ZeroHash,  // destinationCaller: anyone can mint
+    0n,               // maxFee: slow path
+    0,                // minFinalityThreshold: no finality requirement
   );
   const burnReceipt = await burnTx.wait();
   console.log(`[verify-cctp-reverse] burn tx: ${burnReceipt!.hash}`);

@@ -18,7 +18,7 @@ const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
 ] as const;
 const TM_ABI = [
-  "function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken) returns (uint64 nonce)",
+  "function depositForBurn(uint256 amount, uint32 destinationDomain, bytes32 mintRecipient, address burnToken, bytes32 destinationCaller, uint256 maxFee, uint32 minFinalityThreshold) returns (uint64 nonce)",
 ] as const;
 const MT_ABI = [
   "function receiveMessage(bytes message, bytes attestation) returns (bool)",
@@ -78,6 +78,7 @@ export async function bridgeArcToHl(amountUsd6: bigint): Promise<{ burnTxHash: s
   const tm = new ethers.Contract(ARC_TOKEN_MESSENGER, TM_ABI, srcWallet);
   const burnTx = await tm.depositForBurn(
     amountUsd6, HYPERLIQUID_CCTP_DOMAIN, addressToBytes32(srcWallet.address), USDC_ADDRESS,
+    ethers.ZeroHash, 0n, 0,
   );
   const burnReceipt = await burnTx.wait();
   const burnTxHash = burnReceipt!.hash;
@@ -119,6 +120,7 @@ export async function bridgeHlToArc(amountUsd6: bigint): Promise<{ burnTxHash: s
   const tm = new ethers.Contract(HL_TOKEN_MESSENGER, TM_ABI, srcWallet);
   const burnTx = await tm.depositForBurn(
     amountUsd6, ARC_CCTP_DOMAIN, addressToBytes32(srcWallet.address), USDC_ADDRESS_HL,
+    ethers.ZeroHash, 0n, 0,
   );
   const burnReceipt = await burnTx.wait();
   const burnTxHash = burnReceipt!.hash;
