@@ -45,6 +45,12 @@ const agentStates: Record<AgentId, AgentState> = {
   demeter: makeState("demeter"),
 };
 
+const lastSettleDayByAgent: Record<AgentId, number> = {
+  hermes: selectAgentState.get("hermes") ? (selectAgentState.get("hermes") as any).last_settle_day : 0,
+  pythia: selectAgentState.get("pythia") ? (selectAgentState.get("pythia") as any).last_settle_day : 0,
+  demeter: selectAgentState.get("demeter") ? (selectAgentState.get("demeter") as any).last_settle_day : 0,
+};
+
 const proposals: AgentProposal[] = [];
 
 export const state = {
@@ -61,8 +67,9 @@ export const state = {
   recordSettlement(agentId: AgentId, pnl: number) {
     const s = agentStates[agentId];
     const todayDay = Math.floor(Date.now() / 86_400_000);
-    if (s.cumulativePnlToday !== 0 && (s.pnlHistory.at(-1)?.timestamp ?? 0) < todayDay * 86_400_000) {
+    if (lastSettleDayByAgent[agentId] !== todayDay) {
       s.cumulativePnlToday = 0;
+      lastSettleDayByAgent[agentId] = todayDay;
     }
     s.tradesCompleted++;
     s.cumulativePnlToday += pnl;

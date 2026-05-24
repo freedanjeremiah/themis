@@ -141,6 +141,7 @@ contract ThemisVault {
     /// Admin-only wind-down path. Same accounting as settle() but callable while paused.
     /// Pulls agent's funds back, never sidelines (admin is presumed to handle that manually).
     function forceSettle(address agent, int256 pnl) external onlyAdmin {
+        _resetDailyIfNeeded(agent);
         agentDailyPnl[agent] += pnl;
 
         uint256 allocated = agentAllocation[agent];
