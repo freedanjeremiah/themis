@@ -1,5 +1,5 @@
 /**
- * Bidirectional CCTP V2 bridging for Hermes.
+ * Bidirectional CCTP V2 bridging for Pythia.
  *
  * `bridgeArcToHl(amountUsd6)`: burns USDC on Arc, polls Iris, mints on HL testnet.
  * `bridgeHlToArc(amountUsd6)`: burns USDC on HL testnet, polls Iris, mints on Arc.
@@ -25,6 +25,7 @@ const MT_ABI = [
 ] as const;
 
 const USDC_ADDRESS               = process.env.USDC_ADDRESS!;
+const USDC_ADDRESS_HL            = process.env.USDC_ADDRESS_HL ?? USDC_ADDRESS;
 const ARC_TOKEN_MESSENGER        = process.env.CCTP_TOKEN_MESSENGER!;
 const ARC_MESSAGE_TRANSMITTER    = process.env.MESSAGE_TRANSMITTER_ARC ?? "";
 const HL_TOKEN_MESSENGER         = process.env.CCTP_TOKEN_MESSENGER_HL ?? "";
@@ -112,12 +113,12 @@ export async function bridgeHlToArc(amountUsd6: bigint): Promise<{ burnTxHash: s
   }
   const srcProvider = new ethers.JsonRpcProvider(process.env.DEST_RPC_URL!);
   const srcWallet   = new ethers.Wallet(process.env.PRIVATE_KEY_PYTHIA!, srcProvider);
-  const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, srcWallet);
+  const usdc = new ethers.Contract(USDC_ADDRESS_HL, ERC20_ABI, srcWallet);
   await (await usdc.approve(HL_TOKEN_MESSENGER, amountUsd6)).wait();
 
   const tm = new ethers.Contract(HL_TOKEN_MESSENGER, TM_ABI, srcWallet);
   const burnTx = await tm.depositForBurn(
-    amountUsd6, ARC_CCTP_DOMAIN, addressToBytes32(srcWallet.address), USDC_ADDRESS,
+    amountUsd6, ARC_CCTP_DOMAIN, addressToBytes32(srcWallet.address), USDC_ADDRESS_HL,
   );
   const burnReceipt = await burnTx.wait();
   const burnTxHash = burnReceipt!.hash;

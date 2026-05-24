@@ -54,7 +54,17 @@ async function cycle(): Promise<void> {
     // Wait for allocator scoring + vault.allocate
     await new Promise(r => setTimeout(r, 30_000));
 
-    const dep = await depositToVenue(clean, clean.requestedSizeUsd);
+    const { ethers } = await import("ethers");
+    const demeterAddress = new ethers.Wallet(process.env.PRIVATE_KEY_DEMETER!).address;
+    const { readAllocatedUsdc } = await import("./vault-read.js");
+    const allocatedUsd = await readAllocatedUsdc(demeterAddress);
+    if (allocatedUsd <= 0) {
+      console.log(`[demeter] not allocated this cycle (alloc=${allocatedUsd}); skipping deposit`);
+      await reportSettlement("demeter", 0);
+      return;
+    }
+
+    const dep = await depositToVenue(clean, allocatedUsd);
     if (!dep.ok) {
       if (dep.reason === "real_trades_disabled") {
         await reportSettlement("demeter", 0);

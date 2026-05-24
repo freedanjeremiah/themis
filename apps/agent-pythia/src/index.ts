@@ -27,17 +27,18 @@ async function holdAndClose(position: PythiaPosition, allocatedUsd: number): Pro
 
 async function cycle(): Promise<void> {
   console.log(`[pythia] cycle start ${new Date().toISOString()}`);
-  let news: import("./data.js").NewsItem[];
   try {
-    news = await fetchNewsHeadlines();
-  } catch (err) {
-    if (err instanceof StaleHeadlinesError) {
-      console.warn(`[pythia] skipping cycle: ${err.message}`);
-      return;
+    let news;
+    try {
+      news = await fetchNewsHeadlines();
+    } catch (err) {
+      if (err instanceof StaleHeadlinesError) {
+        console.warn(`[pythia] skipping cycle: ${err.message}`);
+        return;
+      }
+      throw err;
     }
-    throw err;
-  }
-  try {
+
     const proposal = await reason(news);
     if (proposal.action === "hold") {
       console.log("[pythia] holding this cycle");
@@ -60,7 +61,17 @@ async function cycle(): Promise<void> {
 
     await new Promise(r => setTimeout(r, 30_000));
 
-    const exec = await executePythiaTrade(clean, clean.requestedSizeUsd);
+    const { ethers } = await import("ethers");
+    const pythiaAddress = new ethers.Wallet(process.env.PRIVATE_KEY_PYTHIA!).address;
+    const { readAllocatedUsdc } = await import("./vault-read.js");
+    const allocatedUsd = await readAllocatedUsdc(pythiaAddress);
+    if (allocatedUsd <= 0) {
+      console.log(`[pythia] not allocated this cycle (alloc=${allocatedUsd}); skipping execute`);
+      await reportSettlement("pythia", 0);
+      return;
+    }
+
+    const exec = await executePythiaTrade(clean, allocatedUsd);
     if (!exec.ok) {
       if (exec.reason === "real_trades_disabled") {
         await reportSettlement("pythia", 0);
@@ -71,14 +82,14 @@ async function cycle(): Promise<void> {
       return;
     }
 
-    const pnlUsd = await holdAndClose(exec.position, clean.requestedSizeUsd);
+    const pnlUsd = await holdAndClose(exec.position, allocatedUsd);
     if (pnlUsd === null) {
       await postStuck("pythia", "hl_close_failed");
       return;
     }
     console.log(`[pythia] real HL PnL: $${pnlUsd.toFixed(4)}`);
 
-    const proceedsUsd = clean.requestedSizeUsd + pnlUsd;
+    const proceedsUsd = allocatedUsd + pnlUsd;
     const proceedsUsd6 = BigInt(Math.max(0, Math.floor(proceedsUsd * 1_000_000)));
     if (proceedsUsd6 > 0n) {
       const back = await bridgeHlToArc(proceedsUsd6);
