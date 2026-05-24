@@ -7,9 +7,22 @@ import {
 } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { parseUnits, formatUnits } from "viem";
-import { VAULT_ABI, ERC20_ABI, USDC_ADDRESS } from "../lib/abis";
+import { ThemisVaultABI as ThemisVaultABIRaw } from "@themis/shared/abis";
 import { wagmiConfig } from "../lib/wagmi";
 import { WalletConnect } from "./WalletConnect";
+
+const ThemisVaultABI = ThemisVaultABIRaw as readonly any[];
+
+const ERC20_ABI = [
+  { name: "approve", type: "function", stateMutability: "nonpayable",
+    inputs: [{ name: "spender", type: "address" }, { name: "amount", type: "uint256" }],
+    outputs: [{ type: "bool" }] },
+  { name: "balanceOf", type: "function", stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ type: "uint256" }] },
+] as const;
+
+const USDC_ADDRESS = "0x3600000000000000000000000000000000000000" as const;
 
 const VAULT_ADDRESS = (process.env.NEXT_PUBLIC_VAULT_ADDRESS ?? "") as `0x${string}`;
 const vaultConfigured =
@@ -26,7 +39,7 @@ export function DepositPanel({ liquidReservePct }: { liquidReservePct: number })
 
   const { data: depositedRaw } = useReadContract({
     address: VAULT_ADDRESS,
-    abi: VAULT_ABI,
+    abi: ThemisVaultABI,
     functionName: "depositedBy",
     args: [address ?? "0x0000000000000000000000000000000000000000"],
     query: { enabled: !!address },
@@ -71,7 +84,7 @@ export function DepositPanel({ liquidReservePct }: { liquidReservePct: number })
       setStep("depositing");
       await writeContractAsync({
         address: VAULT_ADDRESS,
-        abi: VAULT_ABI,
+        abi: ThemisVaultABI,
         functionName: "deposit",
         args: [amountUsdc6],
       });
@@ -97,7 +110,7 @@ export function DepositPanel({ liquidReservePct }: { liquidReservePct: number })
     try {
       await writeContractAsync({
         address: VAULT_ADDRESS,
-        abi: VAULT_ABI,
+        abi: ThemisVaultABI,
         functionName: "withdraw",
         args: [sharesAmount],
       });
