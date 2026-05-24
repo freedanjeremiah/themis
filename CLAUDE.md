@@ -40,19 +40,23 @@ scripts/          create-wallets, deploy, register-agents, set-allocator, e2e.
 
 ## Known traps (read before editing)
 
-1. **PnL reported to `vault.settle()` is still synthetic.** All three agents fall back to formulae like `direction * confidence * size * 0.005` when no real position closes (`agent-hermes/src/index.ts`, `agent-pythia/src/index.ts`, `agent-demeter/src/index.ts`). The allocator's Sharpe-based scoring is gaming itself. **Phase 2 (Real PnL)** addresses this — until then, treat scoring as theatre.
+1. **Aave is not deployed on Arc testnet.** `agent-demeter/src/data.ts` falls back to mock APYs (520/480 bps with block-number noise) if `AAVE_POOL_ADDRESS` is unset. USYC Teller is real and works.
 
-2. **Aave is not deployed on Arc testnet.** `agent-demeter/src/data.ts` falls back to mock APYs (520/480 bps with block-number noise) if `AAVE_POOL_ADDRESS` is unset. USYC Teller is real and works.
+2. **Indexer DB lives at `apps/indexer/themis.db`** (file-backed via `node:sqlite`). Allocator DB lives at `apps/allocator/state.db`. Delete files to reset state. Requires Node ≥ 22.5 for the built-in `node:sqlite` import.
 
-3. **Pythia's data fallback is identical every cycle.** When Twitter and RSS both fail, `data.ts` returns a static "markets steady" headline. Claude then produces identical proposals every cycle until the cycle is skipped (Phase 2).
+3. **The currently-deployed on-chain `TraceAnchor` at `0x87704aB48dE82aBa4FaF3ba81E1edbD37935195c` predates the Phase 1 auth change** — its constructor took no args and its `anchor()` had a different signature. Any redeploy MUST use the new ABI (registry address in constructor; `anchor(hash, cid)` only). Documented depositors are still on the old vault; redeploy only with a migration plan.
 
-4. **Indexer DB lives at `apps/indexer/themis.db`** (file-backed via `node:sqlite`). Allocator DB lives at `apps/allocator/state.db`. Delete files to reset state. Requires Node ≥ 22.5 for the built-in `node:sqlite` import.
+4. **Cycle pace is now 20 min** (`AGENT_CYCLE_MS` env, default `1_200_000`). Each cycle does the full vault → CCTP → HL → close → CCTP → vault roundtrip. The 60s pace from the PRD is gone — Phase 3 onboarding UX must account for the slower demo rhythm.
 
-5. **The currently-deployed on-chain `TraceAnchor` at `0x87704aB48dE82aBa4FaF3ba81E1edbD37935195c` predates the Phase 1 auth change** — its constructor took no args and its `anchor()` had a different signature. Any redeploy MUST use the new ABI (registry address in constructor; `anchor(hash, cid)` only). Documented depositors are still on the old vault; redeploy only with a migration plan.
+5. **Reverse CCTP requires extra env vars before real settlement works.** `CCTP_TOKEN_MESSENGER_HL`, `MESSAGE_TRANSMITTER_ARC`, and `USDC_ADDRESS_HL` are blank in `.env.example`. Fill them after running `pnpm tsx scripts/verify-cctp-testnet.ts` and reading `docs/cctp-testnet.md`. Without them, `bridgeHlToArc` throws and Hermes/Pythia stay stuck after their first cycle.
 
-### Phase 1 changes (foundation done — was previously broken)
+6. **Stuck-agent recovery is manual.** When an agent hits `stuck`, the allocator stops scoring it. Operator runs `pnpm tsx scripts/cctp-recover.ts <agentId> <burnTxHash> [arc-to-hl|hl-to-arc]` to mint the orphaned bridge, then `curl -X POST $ALLOCATOR_URL/stuck -d '{"agentId":"<id>","reason":null}'` to clear the flag.
 
-Phase 1 fixed: empty shared ABIs (now auto-synced via `pnpm abis`, enforced in CI); the vault didn't actually move USDC (now `allocate` transfers, `settle` pulls back); cosmetic `CircleKitDeposit` wrapper (deleted); fake `e2e.ts` (now a real deploy→deposit→allocate→settle→anchor→withdraw round-trip against a hardhat node); in-memory allocator state (now persisted to SQLite); `TraceAnchor` had no auth (now registry-gated); redundant `register-agents.ts` (deleted, deploy.ts handles it).
+### Phase 1 + Phase 2 changes (foundation + real PnL done)
+
+**Phase 1** fixed: empty shared ABIs (auto-synced via `pnpm abis`, enforced in CI); vault didn't actually move USDC (now `allocate` transfers, `settle` pulls back); cosmetic `CircleKitDeposit` wrapper (deleted); fake `e2e.ts` (now real round-trip against hardhat node); in-memory allocator state (now SQLite); `TraceAnchor` had no auth (now registry-gated); redundant `register-agents.ts` (deleted).
+
+**Phase 2** fixed: synthetic PnL across all three agents (now real — Hermes/Pythia close real HL testnet positions, Demeter measures USYC delta); `hl.ts` duplicated in two agents (now `packages/hl-client/`); HL mainnet defaults in `.env.example` (now testnet, mainnet commented); CCTP one-way only (now `bridgeArcToHl` + `bridgeHlToArc` per agent); allocator had no stuck-agent surface (now SQLite-persisted `stuckReason` + `POST /stuck` + cycle filter); Pythia identical-cycle headline fallback (now last-real cache + `StaleHeadlinesError` skips cycle); agents used `requestedSizeUsd` even when allocator scaled down (now read `vault.agentAllocation` after the allocate-wait).
 
 ## Deployed contracts (Arc testnet)
 
