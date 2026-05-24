@@ -9,8 +9,8 @@ import { ethers } from "ethers";
 import { pack } from "msgpackr";
 import { AgentProposal } from "@themis/shared";
 
-const HL_INFO_URL     = "https://api.hyperliquid.xyz/info";
-const HL_EXCHANGE_URL = "https://api.hyperliquid.xyz/exchange";
+const HL_INFO_URL     = process.env.HYPERLIQUID_INFO_URL ?? "https://api.hyperliquid-testnet.xyz/info";
+const HL_EXCHANGE_URL = process.env.HYPERLIQUID_EXCHANGE_URL ?? "https://api.hyperliquid-testnet.xyz/exchange";
 
 interface HlMeta {
   universe: Array<{ name: string; szDecimals: number }>;

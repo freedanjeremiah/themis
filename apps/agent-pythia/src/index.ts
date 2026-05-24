@@ -3,7 +3,7 @@ import { reason } from "./reason.js";
 import { anchorTrace } from "./anchor.js";
 import { submitProposal, reportSettlement } from "./propose.js";
 import { executePythiaTrade } from "./execute.js";
-import { closeHlPosition } from "./hl.js";
+import { closeHlPosition } from "@themis/hl-client";
 import { AGENT_CYCLE_MS, PYTHIA_HOLD_MS } from "@themis/shared";
 
 async function cycle(): Promise<void> {
