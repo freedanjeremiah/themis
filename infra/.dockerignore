@@ -1,0 +1,48 @@
+# Build context excludes — keep image small and avoid cache busts.
+# Note: docker reads .dockerignore from the build context root, which is the
+# repo root (per docker-compose.yml context: ..). So patterns are repo-relative.
+
+node_modules
+**/node_modules
+
+.git
+.github
+
+# Hardhat outputs — regenerated inside the image
+apps/contracts/artifacts
+apps/contracts/cache
+apps/contracts/typechain-types
+
+# Next.js outputs — dashboard runs on Vercel separately
+apps/dashboard/.next
+**/.next
+
+# SQLite runtime files
+*.db
+**/*.db
+
+# TS incremental info
+**/*.tsbuildinfo
+
+# Agent runtime caches (regenerated)
+apps/agent-pythia/.headline-cache.json
+apps/agent-demeter/.shares-held.json
+apps/agent-demeter/demeter-cache.json
+
+# Local env (compose loads env_file at runtime, NOT at build)
+.env
+.env.local
+.env.*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+
+# Tests + coverage
+coverage
+
+# Docs aren't needed in the image
+docs
+*.md

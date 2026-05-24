@@ -1,0 +1,154 @@
+# Themis backend services for production hosting on a single VM.
+#
+# Dashboard runs on Vercel separately. This compose covers:
+#   - allocator  (internal :3001, persistent SQLite at /data/allocator)
+#   - indexer    (internal :3002, persistent SQLite at /data/indexer; HTTPS via Caddy)
+#   - agent-hermes / pythia / demeter (no public port)
+#   - caddy      (public :80 + :443 → indexer; auto-TLS via Let's Encrypt)
+#
+# Bring up:
+#   cd infra
+#   docker compose --env-file ../.env up -d --build
+#
+# Logs:
+#   docker compose logs -f allocator indexer agent-hermes agent-pythia agent-demeter
+
+name: themis
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  env_file:
+    - ../.env
+  build:
+    context: ..
+    dockerfile: infra/Dockerfile
+
+services:
+  allocator:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: allocator
+    container_name: themis-allocator
+    environment:
+      ALLOCATOR_DB_PATH: /data/allocator/state.db
+      ALLOCATOR_URL: http://allocator:3001
+    volumes:
+      - allocator-data:/data/allocator
+    networks:
+      - themis
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:3001/state"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  indexer:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: indexer
+    container_name: themis-indexer
+    environment:
+      INDEXER_DB_PATH: /data/indexer/themis.db
+      INDEXER_URL: http://indexer:3002
+    volumes:
+      - indexer-data:/data/indexer
+    networks:
+      - themis
+    expose:
+      - "3002"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:3002/tvl"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  agent-hermes:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: agent-hermes
+    container_name: themis-agent-hermes
+    environment:
+      ALLOCATOR_URL: http://allocator:3001
+      INDEXER_URL: http://indexer:3002
+    depends_on:
+      allocator:
+        condition: service_healthy
+      indexer:
+        condition: service_healthy
+    networks:
+      - themis
+
+  agent-pythia:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: agent-pythia
+    container_name: themis-agent-pythia
+    environment:
+      ALLOCATOR_URL: http://allocator:3001
+      INDEXER_URL: http://indexer:3002
+    depends_on:
+      allocator:
+        condition: service_healthy
+      indexer:
+        condition: service_healthy
+    networks:
+      - themis
+
+  agent-demeter:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+      target: agent-demeter
+    container_name: themis-agent-demeter
+    environment:
+      ALLOCATOR_URL: http://allocator:3001
+      INDEXER_URL: http://indexer:3002
+    depends_on:
+      allocator:
+        condition: service_healthy
+      indexer:
+        condition: service_healthy
+    networks:
+      - themis
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: themis-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      # Operator: set INDEXER_DOMAIN in ../.env to the public hostname pointed at this VM.
+      # e.g. INDEXER_DOMAIN=indexer.themis.example
+      INDEXER_DOMAIN: ${INDEXER_DOMAIN:-indexer.local}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - indexer
+    networks:
+      - themis
+
+networks:
+  themis:
+    driver: bridge
+
+volumes:
+  allocator-data:
+  indexer-data:
+  caddy-data:
+  caddy-config:
