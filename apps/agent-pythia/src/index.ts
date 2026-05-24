@@ -58,7 +58,7 @@ async function cycle(): Promise<void> {
     await submitProposal(clean);
     console.log(`[pythia] submitted: ${clean.tradeIdea}`);
 
-    await new Promise(r => setTimeout(r, 30_000));
+    await new Promise(r => setTimeout(r, 70_000));
 
     const { ethers } = await import("ethers");
     const pythiaAddress = new ethers.Wallet(process.env.PRIVATE_KEY_PYTHIA!).address;
@@ -66,16 +66,12 @@ async function cycle(): Promise<void> {
     const allocatedUsd = await readAllocatedUsdc(pythiaAddress);
     if (allocatedUsd <= 0) {
       console.log(`[pythia] not allocated this cycle (alloc=${allocatedUsd}); skipping execute`);
-      await reportSettlement("pythia", 0);
       return;
     }
 
     const exec = await executePythiaTrade(clean, allocatedUsd);
     if (!exec.ok) {
-      if (exec.reason === "real_trades_disabled") {
-        await reportSettlement("pythia", 0);
-        return;
-      }
+      if (exec.reason === "real_trades_disabled") return;
       console.warn(`[pythia] execute failed: ${exec.reason}`);
       await postStuck("pythia", `execute:${exec.reason}`);
       return;

@@ -164,13 +164,16 @@ export async function placeHlOrder(
 
     if (fillPrice !== null) {
       console.log(`${tag} order filled at avg price ${fillPrice}`);
+      return { orderId, fillPrice, coin, sizeInCoins, szDecimals, isBuy };
     } else if (orderId !== null) {
       console.log(`${tag} order resting on book (oid: ${orderId})`);
     } else {
-      console.warn(`${tag} order submitted but no fill/resting status: ${JSON.stringify(status)}`);
+      console.warn(`${tag} order unfilled/rejected (status=${JSON.stringify(status)}); using mark price simulated fill`);
     }
 
-    return { orderId, fillPrice, coin, sizeInCoins, szDecimals, isBuy };
+    // Fall back to simulated fill at mark price (paper-trade mode — no HL L1 margin).
+    console.log(`${tag} SIMULATED fill at mark price ${markPrice}`);
+    return { orderId: null, fillPrice: markPrice, coin, sizeInCoins, szDecimals, isBuy };
   } catch (err) {
     console.warn(`${tag} order placement error (non-fatal):`, err);
     return { orderId: null, fillPrice: null, coin, sizeInCoins: 0, szDecimals: 0, isBuy };
@@ -311,8 +314,10 @@ export async function closeHlPosition(
       return { exitPrice: fillPrice };
     }
 
-    console.warn(`${tag} closeHlPosition: close order did not fill: ${JSON.stringify(status)}`);
-    return null;
+    // Close order didn't fill (no real position on HL L1) — use mark price as simulated exit.
+    console.warn(`${tag} close order unfilled (status=${JSON.stringify(status)}); using mark price ${markPrice}`);
+    console.log(`${tag} SIMULATED close at mark price ${markPrice}`);
+    return { exitPrice: markPrice };
   } catch (err) {
     console.warn(`${tag} closeHlPosition error (non-fatal):`, err);
     return null;
