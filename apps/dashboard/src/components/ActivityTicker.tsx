@@ -3,83 +3,75 @@ import { useEffect, useState } from "react";
 import { type WsMessage } from "@themis/shared";
 import { AGENT_META } from "../lib/agent-meta";
 
-const MAX = 8;
+const MAX = 12;
 
-type TickerEvent = {
-  id: number;        // monotonic local id
-  ts: number;
-  text: string;
-};
+type Kind = "deposit" | "allocation" | "settlement" | "trace";
+type TickerEvent = { id: number; text: string; kind: Kind; positive?: boolean };
 
 let nextId = 1;
 
-function formatEvent(msg: WsMessage): string | null {
+function formatEvent(msg: WsMessage): Omit<TickerEvent, "id"> | null {
   if (msg.event === "deposit") {
     const d = msg.data as { wallet: string; amount: number };
-    return `New depositor: ${d.wallet.slice(0, 6)}…${d.wallet.slice(-4)} · $${(d.amount / 1e6).toFixed(2)} deposited`;
+    return { kind: "deposit", text: `New depositor ${d.wallet.slice(0, 6)}…${d.wallet.slice(-4)}, $${(d.amount / 1e6).toFixed(2)}` };
   }
   if (msg.event === "allocation") {
     const d = msg.data as { agentId: string; amount: number };
     const name = AGENT_META[d.agentId as keyof typeof AGENT_META]?.name ?? d.agentId;
-    return `${name} allocated $${(d.amount / 1e6).toFixed(2)}`;
+    return { kind: "allocation", text: `${name} allocated $${(d.amount / 1e6).toFixed(2)}` };
   }
   if (msg.event === "settlement") {
     const d = msg.data as { agentId: string; pnl: number };
     const name = AGENT_META[d.agentId as keyof typeof AGENT_META]?.name ?? d.agentId;
     const pnlUsd = d.pnl / 1e6;
-    const sign = pnlUsd >= 0 ? "+" : "";
-    return `${name} settled ${sign}$${pnlUsd.toFixed(2)}`;
+    return { kind: "settlement", positive: pnlUsd >= 0, text: `${name} settled ${pnlUsd >= 0 ? "+" : "−"}$${Math.abs(pnlUsd).toFixed(2)}` };
   }
   if (msg.event === "trace") {
     const d = msg.data as { agentId: string; tradeIdea: string };
     const name = AGENT_META[d.agentId as keyof typeof AGENT_META]?.name ?? d.agentId;
-    return `${name} proposed: ${d.tradeIdea}`;
+    return { kind: "trace", text: `${name} proposed: ${d.tradeIdea}` };
   }
   return null;
 }
 
-function relativeTime(ts: number): string {
-  const sec = Math.max(0, Math.round((Date.now() - ts) / 1000));
-  if (sec < 60) return `${sec}s ago`;
-  const min = Math.round(sec / 60);
-  return `${min}m ago`;
+function Item({ e }: { e: TickerEvent }) {
+  const tone = e.kind === "settlement" ? (e.positive ? "text-gain" : "text-loss") : "text-ink-2";
+  return (
+    <span className="mr-8 inline-flex items-center gap-2 text-xs">
+      <span className="h-1 w-1 rounded-full bg-ink/30" />
+      <span className={tone}>{e.text}</span>
+    </span>
+  );
 }
 
 export function ActivityTicker({ feed }: { feed: WsMessage[] }) {
   const [events, setEvents] = useState<TickerEvent[]>([]);
-  const [, forceTick] = useState(0);
 
-  // When new WS messages arrive, prepend formatted entries.
   useEffect(() => {
     if (feed.length === 0) return;
-    const newest = feed[0];
-    const text = formatEvent(newest);
-    if (!text) return;
-    setEvents(prev => [{ id: nextId++, ts: Date.now(), text }, ...prev].slice(0, MAX));
+    const f = formatEvent(feed[0]);
+    if (!f) return;
+    setEvents(prev => [{ id: nextId++, ...f }, ...prev].slice(0, MAX));
   }, [feed]);
-
-  // Tick every 5s to refresh relative-time strings.
-  useEffect(() => {
-    const t = setInterval(() => forceTick(x => x + 1), 5_000);
-    return () => clearInterval(t);
-  }, []);
 
   if (events.length === 0) return null;
 
   return (
-    <div className="fixed bottom-0 inset-x-0 bg-gray-950 border-t border-gray-800 px-4 py-2 text-xs text-gray-300 overflow-hidden">
-      <div className="max-w-5xl mx-auto flex items-center gap-6 overflow-x-auto whitespace-nowrap">
-        {events.map((e, i) => (
-          <span
-            key={e.id}
-            className="inline-flex items-center gap-2 transition-opacity duration-700"
-            style={{ opacity: 1 - (i / MAX) * 0.6 }}
-          >
-            <span className="text-gray-400">→</span>
-            <span>{e.text}</span>
-            <span className="text-gray-600">· {relativeTime(e.ts)}</span>
-          </span>
-        ))}
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-ink bg-paper">
+      <div className="mx-auto flex max-w-6xl items-center px-5 py-2">
+        <span className="label shrink-0 pr-4">On the wire</span>
+        <div
+          className="marquee relative flex-1 overflow-hidden"
+          style={{
+            WebkitMaskImage: "linear-gradient(to right, transparent, #000 2rem, #000 calc(100% - 2rem), transparent)",
+            maskImage: "linear-gradient(to right, transparent, #000 2rem, #000 calc(100% - 2rem), transparent)",
+          }}
+        >
+          <div className="marquee-track whitespace-nowrap">
+            {events.map(e => <Item key={e.id} e={e} />)}
+            {events.map(e => <Item key={`dup-${e.id}`} e={e} />)}
+          </div>
+        </div>
       </div>
     </div>
   );

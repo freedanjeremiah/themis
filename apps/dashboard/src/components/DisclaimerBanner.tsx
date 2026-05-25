@@ -13,19 +13,18 @@ function writeDismissed(): void {
 
 export function DisclaimerBanner() {
   const [hidden, setHidden] = useState(true);
-  // Read localStorage AFTER mount to avoid SSR mismatch
   useEffect(() => { setHidden(readDismissed()); }, []);
 
   if (hidden) return null;
   return (
-    <div className="bg-yellow-950 border-b border-yellow-700 text-yellow-200 text-xs px-4 py-2 flex items-center justify-between">
-      <span>
-        <strong>Arc testnet — testnet USDC only — not real money.</strong> Hackathon prototype, unaudited.
-      </span>
+    <div className="flex items-center justify-center gap-3 border-b border-ink/15 bg-paper-2 px-4 py-1.5 text-center">
+      <p className="text-2xs uppercase tracking-[0.08em] text-ink-2">
+        Arc testnet · testnet USDC only, not real money · hackathon prototype, unaudited
+      </p>
       <button
         onClick={() => { setHidden(true); writeDismissed(); }}
-        className="text-yellow-400 hover:text-yellow-200 ml-4 font-mono"
-        aria-label="Dismiss banner"
+        className="press text-sm text-ink-3 hover:text-ink"
+        aria-label="Dismiss notice"
       >
         ×
       </button>

@@ -1,38 +1,39 @@
 /**
  * Single source of truth for per-agent display info.
- * Consumed by AgentBadge, ReasoningTheater, CompactLeaderboard, ActivityTicker.
+ * Editorial register: agents are distinguished by name, monogram, and role,
+ * not by colour. Identity is typographic, not chromatic.
  */
 export type AgentId = "hermes" | "pythia" | "demeter";
 
 export const AGENT_META: Record<AgentId, {
   name: string;
-  color: string;         // tailwind colour token, e.g. "blue", "purple", "green"
-  thesis: string;        // short tooltip body
+  monogram: string;      // single-letter mark for the ruled monogram box
+  role: string;          // one-line desk/beat
+  thesis: string;        // tooltip body
   venue: string;
 }> = {
   hermes: {
     name: "Hermes",
-    color: "blue",
-    thesis: "Funding-rate arbitrage — longs the cheap side and shorts the expensive side of perpetual funding rates.",
-    venue: "Hyperliquid testnet (via CCTP)",
+    monogram: "H",
+    role: "Funding-rate arbitrage",
+    thesis: "Funding-rate arbitrage. Longs the cheap side and shorts the expensive side of perpetual funding rates.",
+    venue: "Hyperliquid testnet",
   },
   pythia: {
     name: "Pythia",
-    color: "purple",
-    thesis: "News-reactive ETH/BTC perp trader. Reads Twitter + RSS, asks Claude what to do, trades the sentiment.",
-    venue: "Hyperliquid testnet (via CCTP)",
+    monogram: "P",
+    role: "News-reactive trader",
+    thesis: "News-reactive ETH/BTC perp trader. Reads Twitter and RSS, asks Claude what to do, trades the sentiment.",
+    venue: "Hyperliquid testnet",
   },
   demeter: {
     name: "Demeter",
-    color: "green",
-    thesis: "Stablecoin yield rotator. Parks idle capital in USYC for yield while perp agents trade.",
+    monogram: "D",
+    role: "Stablecoin yield",
+    thesis: "Stablecoin yield rotator. Parks idle capital in USYC for yield while the perp agents trade.",
     venue: "USYC Teller on Arc",
   },
 };
 
-/** Background/text class pair for the agent's small label pill (used by AgentBadge). */
-export const AGENT_PILL_CLASSES: Record<AgentId, string> = {
-  hermes: "bg-blue-900 text-blue-300",
-  pythia: "bg-purple-900 text-purple-300",
-  demeter: "bg-green-900 text-green-300",
-};
+/** Neutral ink for sparkline strokes; identity is carried by name, not hue. */
+export const SPARK_INK = "oklch(0.42 0.012 60)";

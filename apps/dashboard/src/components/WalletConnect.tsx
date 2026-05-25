@@ -8,17 +8,15 @@ export function WalletConnect() {
 
   if (isConnected && address) {
     return (
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-400 font-mono">
-          {address.slice(0, 6)}…{address.slice(-4)}
-        </span>
+      <span className="inline-flex items-baseline gap-2">
+        <span className="text-xs tnum text-ink-2">{address.slice(0, 6)}…{address.slice(-4)}</span>
         <button
           onClick={() => disconnect()}
-          className="text-xs text-gray-500 hover:text-red-400 transition-colors"
+          className="press text-2xs font-semibold uppercase tracking-[0.1em] text-ink-3 hover:text-loss"
         >
           Disconnect
         </button>
-      </div>
+      </span>
     );
   }
 
@@ -28,9 +26,9 @@ export function WalletConnect() {
     <button
       onClick={() => connector && connect({ connector })}
       disabled={!connector}
-      className={`px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded transition-colors ${!connector ? "opacity-50 cursor-not-allowed" : ""}`}
+      className="press border border-ink/30 px-3 py-1 text-2xs font-semibold uppercase tracking-[0.1em] text-ink hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
     >
-      Connect Wallet
+      Connect wallet
     </button>
   );
 }

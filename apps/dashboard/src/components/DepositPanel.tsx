@@ -7,6 +7,7 @@ import {
 } from "wagmi";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { parseUnits, formatUnits } from "viem";
+import { Loader2, ShieldAlert } from "lucide-react";
 import ThemisVaultABIRaw from "@themis/shared/abis/ThemisVault.json";
 import { wagmiConfig } from "../lib/wagmi";
 import { WalletConnect } from "./WalletConnect";
@@ -45,8 +46,6 @@ export function DepositPanel({
     if (typeof prefilledAmount === "number" && prefilledAmount > 0) {
       setAmount(String(prefilledAmount));
     }
-    // prefillNonce changes on every onboarding "Deposit $10" click so we re-apply even
-    // when prefilledAmount is unchanged.
   }, [prefilledAmount, prefillNonce]);
   const [step, setStep] = useState<"idle" | "approving" | "depositing" | "withdrawing">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +79,7 @@ export function DepositPanel({
     try {
       amountUsdc6 = parseUnits(amount, 6);
     } catch {
-      setError("Invalid amount — max 6 decimal places");
+      setError("Invalid amount (max 6 decimal places)");
       return;
     }
     if (amountUsdc6 <= 0n) { setError("Amount must be greater than 0"); return; }
@@ -138,95 +137,112 @@ export function DepositPanel({
   }
 
   const busy = step !== "idle";
+  const reserveLow = liquidReservePct < 25;
 
   return (
-    <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-          {tab === "deposit" ? "Deposit" : "Withdraw"}
-        </h2>
+    <div className="border border-ink/30 bg-paper-2">
+      <div className="flex items-baseline justify-between border-b border-ink/15 px-4 py-3">
+        <h2 className="font-serif text-lg font-semibold text-ink">Back the fund</h2>
         <WalletConnect />
       </div>
 
-      <div className="flex gap-2 mb-4">
-        {(["deposit", "withdraw"] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => { setTab(t); setAmount(""); }}
-            className={`flex-1 py-1.5 rounded text-sm font-medium transition-colors ${
-              tab === t ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white bg-gray-800"
-            }`}
-          >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
-      </div>
+      <div className="p-4">
+        {/* segmented control */}
+        <div className="mb-3.5 inline-flex border border-ink/25">
+          {(["deposit", "withdraw"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => { setTab(t); setAmount(""); setError(null); }}
+              className={`press px-4 py-1 text-2xs font-semibold uppercase tracking-[0.1em] ${
+                tab === t ? "bg-ink text-paper" : "text-ink-3 hover:text-ink"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
 
-      {!isConnected ? (
-        <div className="text-center text-gray-500 text-sm py-6 border border-dashed border-gray-700 rounded">
-          Connect wallet to deposit USDC
-        </div>
-      ) : !vaultConfigured ? (
-        <div className="text-center text-red-500 text-sm py-4">
-          Vault not deployed — set NEXT_PUBLIC_VAULT_ADDRESS
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {tab === "deposit" && (
-            <p className="text-xs text-gray-500">
-              Balance: <span className="text-gray-300">${usdcBalance.toFixed(2)}</span>
-              {" · "}Cap remaining: <span className="text-gray-300">${remaining.toFixed(2)}</span>
-            </p>
-          )}
-          <input
-            type="number"
-            min="0"
-            max={tab === "deposit" ? remaining : undefined}
-            placeholder={
-              tab === "deposit"
-                ? `Amount USDC (max $${remaining.toFixed(0)})`
-                : "Shares to burn"
-            }
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-          />
-          {error && <p className="text-xs text-red-400">{error}</p>}
-          <button
-            onClick={tab === "deposit" ? handleDeposit : handleWithdraw}
-            disabled={busy || !amount}
-            className="w-full py-2 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
-          >
-            {busy
-              ? step === "approving"
-                ? "Approving USDC…"
-                : step === "depositing"
-                ? "Depositing…"
-                : step === "withdrawing"
-                ? "Withdrawing…"
-                : "Pending…"
-              : tab === "deposit"
-              ? "Approve & Deposit"
-              : "Withdraw"}
-          </button>
-        </div>
-      )}
+        {!isConnected ? (
+          <div className="border border-dashed border-ink/25 py-6 text-center font-serif text-base italic text-ink-3">
+            Connect a wallet to subscribe.
+          </div>
+        ) : !vaultConfigured ? (
+          <div className="py-4 text-center text-xs text-loss">
+            Vault not deployed. Set NEXT_PUBLIC_VAULT_ADDRESS.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {tab === "deposit" && (
+              <div className="flex justify-between text-xs text-ink-3">
+                <span>Balance <span className="tnum text-ink-2">${usdcBalance.toFixed(2)}</span></span>
+                <span>Cap left <span className="tnum text-ink-2">${remaining.toFixed(2)}</span></span>
+              </div>
+            )}
 
-      <div className="mt-3 space-y-1">
-        <p className="text-xs text-gray-500">
-          Liquid reserve:{" "}
-          <span className={liquidReservePct < 25 ? "text-yellow-400" : "text-gray-400"}>
-            {liquidReservePct.toFixed(1)}%
-          </span>
-          {liquidReservePct < 25 && (
-            <span className="block text-yellow-500">
-              Reserve low — large withdrawals may revert
+            <div className="flex items-baseline border-b border-ink/30 focus-within:border-accent">
+              <span className="pointer-events-none font-serif text-2xl text-ink-3">$</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                max={tab === "deposit" ? remaining : undefined}
+                placeholder={tab === "deposit" ? remaining.toFixed(0) : "Shares"}
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                className="w-full bg-transparent py-1.5 pl-1 font-serif text-2xl tnum text-ink placeholder-ink/25 focus:outline-none"
+              />
+              <span className="label shrink-0">{tab === "deposit" ? "USDC" : "shares"}</span>
+            </div>
+
+            {tab === "deposit" && (
+              <div className="flex gap-2">
+                {[10, 25, 50].map(v => (
+                  <button
+                    key={v}
+                    onClick={() => setAmount(String(Math.min(v, remaining || v)))}
+                    className="press flex-1 border border-ink/20 py-1 font-serif text-sm tnum text-ink-2 hover:border-ink/40 hover:text-ink"
+                  >
+                    ${v}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {error && (
+              <p className="flex items-start gap-1.5 text-xs text-loss" role="alert">
+                <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {error}
+              </p>
+            )}
+
+            <button
+              onClick={tab === "deposit" ? handleDeposit : handleWithdraw}
+              disabled={busy || !amount}
+              className="press inline-flex w-full items-center justify-center gap-2 bg-accent py-2.5 text-2xs font-semibold uppercase tracking-[0.12em] text-paper hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {busy
+                ? step === "approving" ? "Approving USDC"
+                  : step === "depositing" ? "Depositing"
+                  : step === "withdrawing" ? "Withdrawing"
+                  : "Pending"
+                : tab === "deposit" ? "Approve and deposit"
+                : "Withdraw"}
+            </button>
+          </div>
+        )}
+
+        <div className="mt-4 border-t border-ink/15 pt-3">
+          <div className="flex items-center justify-between">
+            <span className="label">Liquid reserve</span>
+            <span className={`font-serif text-sm tnum ${reserveLow ? "text-warn" : "text-ink-2"}`}>
+              {liquidReservePct.toFixed(1)}%
             </span>
-          )}
-        </p>
-        <p className="text-xs text-red-500/70">
-          Hackathon prototype — unaudited — deposits capped at $100
-        </p>
+          </div>
+          {reserveLow && <p className="mt-1.5 text-2xs text-warn">Reserve low; large withdrawals may revert.</p>}
+          <p className="mt-2 font-serif text-xs italic leading-relaxed text-ink-3">
+            Testnet prototype, unaudited. Deposits capped at $100.
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { AGENT_META, AGENT_PILL_CLASSES, type AgentId } from "../lib/agent-meta";
+import { AGENT_META, type AgentId } from "../lib/agent-meta";
 
 const VALID_AGENT_IDS = ["hermes", "pythia", "demeter"] as const;
 function isAgentId(s: string): s is AgentId {
@@ -8,30 +8,39 @@ function isAgentId(s: string): s is AgentId {
 }
 
 /**
- * Agent name pill with hover tooltip showing thesis + venue.
- * If the agentId is unknown, falls back to a neutral grey pill with no tooltip.
+ * Editorial byline: a ruled serif monogram + the agent's name in small caps,
+ * with a hover tooltip (role, thesis, venue). Identity is typographic, not colour.
  */
 export function AgentBadge({ agentId, size = "sm" }: { agentId: string; size?: "sm" | "md" }) {
   const [hover, setHover] = useState(false);
   const known = isAgentId(agentId);
   const meta = known ? AGENT_META[agentId] : null;
-  const pillClass = known ? AGENT_PILL_CLASSES[agentId] : "bg-gray-700 text-gray-300";
-  const sizeClass = size === "md" ? "text-sm px-3 py-1" : "text-xs px-2 py-0.5";
+  const name = meta?.name ?? agentId;
+  const mono = meta?.monogram ?? name.charAt(0).toUpperCase();
+
+  const box = size === "md" ? "h-6 w-6 text-sm" : "h-5 w-5 text-xs";
+  const nameCls = size === "md" ? "text-sm" : "text-xs";
 
   return (
     <span
-      className="relative inline-block"
+      className="relative inline-flex items-center gap-2"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <span className={`rounded ${sizeClass} ${pillClass} font-semibold uppercase tracking-wide cursor-default`}>
-        {meta?.name ?? agentId}
+      <span className={`inline-flex shrink-0 items-center justify-center border border-ink/30 font-serif font-semibold text-ink ${box}`}>
+        {mono}
       </span>
+      <span className={`font-semibold uppercase tracking-[0.08em] text-ink ${nameCls}`}>{name}</span>
+
       {hover && meta && (
-        <span className="absolute left-0 top-full mt-1 z-10 w-64 bg-gray-950 border border-gray-700 rounded p-3 text-xs text-gray-200 shadow-lg">
-          <strong className="text-white">{meta.name}</strong>
-          <p className="mt-1 text-gray-300">{meta.thesis}</p>
-          <p className="mt-1 text-gray-500">Venue: {meta.venue}</p>
+        <span className="absolute left-0 top-full z-30 mt-2 w-72 border border-ink/20 bg-paper-2 p-3 text-xs shadow-[0_8px_24px_-12px_rgba(0,0,0,0.35)] animate-fade-in">
+          <span className="flex items-center gap-2">
+            <span className="inline-flex h-5 w-5 items-center justify-center border border-ink/30 font-serif text-xs font-semibold text-ink">{mono}</span>
+            <strong className="font-serif text-sm text-ink">{meta.name}</strong>
+            <span className="label ml-auto">{meta.role}</span>
+          </span>
+          <p className="pretty mt-2 leading-relaxed text-ink-2">{meta.thesis}</p>
+          <p className="mt-1.5 text-2xs text-ink-3">Venue · {meta.venue}</p>
         </span>
       )}
     </span>

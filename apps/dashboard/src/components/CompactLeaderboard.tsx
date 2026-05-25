@@ -1,6 +1,7 @@
 "use client";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { AgentBadge } from "./AgentBadge";
+import { SPARK_INK } from "../lib/agent-meta";
 
 type AgentRow = {
   agentId: string;
@@ -12,66 +13,59 @@ type AgentRow = {
   sharpe: number;
 };
 
-const SPARK_COLOR: Record<string, string> = {
-  hermes: "#60a5fa",
-  pythia: "#a78bfa",
-  demeter: "#34d399",
-};
-
-const DEPOSIT_RAW = 10_000_000; // $10 per agent in raw USDC (6 decimals)
+const DEPOSIT_RAW = 10_000_000; // $10 seed per agent, raw USDC (6 decimals)
 
 export function CompactLeaderboard({ agents }: { agents: AgentRow[] }) {
-  const withPnl = agents.map(a => ({
-    ...a,
-    cumPnlRaw: a.pnlHistory.reduce((s, p) => s + p.pnl, 0),
-  }));
-  const sorted = [...withPnl].sort((a, b) => b.cumPnlRaw - a.cumPnlRaw);
+  const sorted = agents
+    .map(a => ({ ...a, cumPnlRaw: a.pnlHistory.reduce((s, p) => s + p.pnl, 0) }))
+    .sort((a, b) => b.cumPnlRaw - a.cumPnlRaw);
 
   return (
-    <section className="space-y-3">
-      <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-        Leaderboard
-      </h2>
-      {sorted.map(agent => {
-        const pct = ((agent.cumPnlRaw / DEPOSIT_RAW) * 100).toFixed(2);
-        const pctNum = agent.cumPnlRaw / DEPOSIT_RAW * 100;
-        const sparkColor = SPARK_COLOR[agent.agentId] ?? "#fff";
+    <section>
+      <div className="flex items-baseline justify-between border-b-2 border-ink pb-2">
+        <h2 className="font-serif text-xl font-semibold tracking-tight text-ink">Standings</h2>
+        <span className="label">by return</span>
+      </div>
 
-        return (
-          <div key={agent.agentId}
-            className="bg-gray-900 rounded-lg p-3 border border-gray-700">
-            <div className="flex items-center justify-between mb-1">
-              <AgentBadge agentId={agent.agentId} />
-              <div className="flex items-center gap-2">
-                {agent.sidelined && (
-                  <span className="text-[10px] text-red-400 border border-red-600 rounded px-1.5 py-0.5">
-                    Sidelined
-                  </span>
-                )}
-                <span className={`text-base font-mono font-bold ${pctNum >= 0 ? "text-green-400" : "text-red-400"}`}>
-                  {pctNum >= 0 ? "+" : ""}{pct}%
+      <div className="divide-y divide-ink/12">
+        {sorted.map((agent, rank) => {
+          const pctNum = (agent.cumPnlRaw / DEPOSIT_RAW) * 100;
+          const up = pctNum >= 0;
+          const spark = agent.pnlHistory.slice(-24).map((p, i) => ({ i, pnl: p.pnl }));
+
+          return (
+            <div key={agent.agentId} className="py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-3 font-serif text-sm tnum text-ink-3">{rank + 1}</span>
+                  <AgentBadge agentId={agent.agentId} />
+                  {agent.sidelined && (
+                    <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-loss">sidelined</span>
+                  )}
+                </div>
+                <span className={`font-serif text-lg tnum ${up ? "text-gain" : "text-loss"}`}>
+                  {up ? "+" : "−"}{Math.abs(pctNum).toFixed(2)}%
+                </span>
+              </div>
+
+              <div className="mt-1.5 flex items-center gap-3 pl-[1.375rem]">
+                <div className="h-7 flex-1">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={spark}>
+                      <Line type="monotone" dataKey="pnl" stroke={SPARK_INK} strokeWidth={1.25} dot={false} isAnimationActive={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <span className="shrink-0 text-2xs uppercase tracking-[0.06em] text-ink-3">
+                  {agent.tradesCompleted < 10 ? "warming up" : <>Sharpe <span className="tnum text-ink-2">{agent.sharpe.toFixed(2)}</span></>}
+                  <span className="mx-1.5 text-ink/25">·</span>
+                  <span className="tnum text-ink-2">{agent.tradesCompleted}</span> trades
                 </span>
               </div>
             </div>
-            <div className="flex justify-between text-[11px] text-gray-400 mb-1">
-              <span>
-                Sharpe:{" "}
-                {agent.tradesCompleted < 10
-                  ? <span className="text-yellow-500">boot</span>
-                  : <span className="text-white font-mono">{agent.sharpe.toFixed(2)}</span>}
-              </span>
-              <span>Trades: <span className="text-white font-mono">{agent.tradesCompleted}</span></span>
-            </div>
-            <div className="h-8 -mx-1">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={agent.pnlHistory.slice(-24)}>
-                  <Line type="monotone" dataKey="pnl" stroke={sparkColor} dot={false} strokeWidth={1.5} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </section>
   );
 }
