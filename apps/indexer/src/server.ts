@@ -75,10 +75,19 @@ export function broadcast(msg: WsMessage): void {
   }
 }
 
-app.get("/tvl", (_req, res) => {
-  const row = getLatestTotalAssets.get() as { total_assets: number } | undefined;
+app.get("/tvl", async (_req, res) => {
   const { count } = getDepositCount.get() as { count: number };
-  res.json({ totalUsdc: row?.total_assets ?? 0, depositCount: count });
+  // Live vault balance reflects deposits immediately; the settlements table only
+  // updates each cycle and would ignore deposits made since the last settle.
+  let totalUsdc: number | null = null;
+  if (_vault) {
+    try { totalUsdc = Number(await _vault.totalAssets()); } catch { /* fall back below */ }
+  }
+  if (totalUsdc === null) {
+    const row = getLatestTotalAssets.get() as { total_assets: number } | undefined;
+    totalUsdc = row?.total_assets ?? 0;
+  }
+  res.json({ totalUsdc, depositCount: count });
 });
 
 app.get("/traces", (req, res) => {

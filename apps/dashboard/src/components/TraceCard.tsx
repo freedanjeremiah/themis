@@ -45,7 +45,7 @@ export function TraceCard({ trace, fresh = false }: { trace: TraceItem; fresh?: 
       <div className="mt-2.5 flex items-center gap-4">
         {hasIpfs && (
           <a
-            href={trace.cid.replace("ipfs://", "https://gateway.pinata.cloud/ipfs/")}
+            href={trace.cid.replace("ipfs://", "https://ipfs.io/ipfs/")}
             target="_blank"
             rel="noreferrer"
             className="press ulink text-2xs font-semibold uppercase tracking-[0.1em] text-ink-3 hover:text-accent"

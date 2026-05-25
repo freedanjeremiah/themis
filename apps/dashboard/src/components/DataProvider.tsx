@@ -86,11 +86,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const url = process.env.NEXT_PUBLIC_INDEXER_URL ?? "http://localhost:3002";
 
-    fetch(`${url}/tvl`).then(r => r.ok ? r.json() : null).then((d: any) => {
-      if (typeof d?.totalUsdc === "number") setTvl(d.totalUsdc);
-      if (typeof d?.depositCount === "number") setDepositCount(d.depositCount);
-    }).catch(() => {});
+    // Vault snapshot (TVL, depositors, per-agent allocation/standings). These are
+    // cheap indexer REST reads (no IPFS), so we poll them so the numbers stay live
+    // between the sparse WebSocket settlement events. /tvl reads the chain directly.
+    const pollVault = () => {
+      fetch(`${url}/tvl`).then(r => r.ok ? r.json() : null).then((d: any) => {
+        if (typeof d?.totalUsdc === "number") setTvl(d.totalUsdc);
+        if (typeof d?.depositCount === "number") setDepositCount(d.depositCount);
+      }).catch(() => {});
 
+      fetch(`${url}/agents`).then(r => r.ok ? r.json() : null).then((data: unknown) => {
+        if (!Array.isArray(data)) return;
+        setAgents(prev => withDerived(prev.map(agent => {
+          const live = (data as Array<any>).find(a => a.agentId === agent.agentId);
+          if (!live) return agent;
+          return {
+            ...agent,
+            allocationUsdc: live.currentAllocationUsdc ?? agent.allocationUsdc,
+            sidelined: live.sidelined ?? agent.sidelined,
+            pnlHistory: live.pnlHistory ?? agent.pnlHistory,
+            tradesCompleted: live.tradesCompleted ?? agent.tradesCompleted,
+            sharpe: live.sharpe ?? agent.sharpe,
+            maxDrawdown: live.maxDrawdown ?? agent.maxDrawdown,
+          };
+        })));
+      }).catch(() => {});
+    };
+
+    // Trace feed only needs an initial backfill; new dispatches arrive over WS.
     fetch(`${url}/traces?limit=20`).then(r => r.ok ? r.json() : null).then((data: unknown) => {
       if (!Array.isArray(data)) return;
       setTraces((data as Array<Record<string, unknown>>).map(r => ({
@@ -104,22 +127,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       })));
     }).catch(() => {});
 
-    fetch(`${url}/agents`).then(r => r.ok ? r.json() : null).then((data: unknown) => {
-      if (!Array.isArray(data)) return;
-      setAgents(prev => withDerived(prev.map(agent => {
-        const live = (data as Array<any>).find(a => a.agentId === agent.agentId);
-        if (!live) return agent;
-        return {
-          ...agent,
-          allocationUsdc: live.currentAllocationUsdc ?? agent.allocationUsdc,
-          sidelined: live.sidelined ?? agent.sidelined,
-          pnlHistory: live.pnlHistory ?? agent.pnlHistory,
-          tradesCompleted: live.tradesCompleted ?? agent.tradesCompleted,
-          sharpe: live.sharpe ?? agent.sharpe,
-          maxDrawdown: live.maxDrawdown ?? agent.maxDrawdown,
-        };
-      })));
-    }).catch(() => {});
+    pollVault();
+    const iv = setInterval(pollVault, 15_000);
+    return () => clearInterval(iv);
   }, []);
 
   const wsState = useIndexerSocket(onMessage);

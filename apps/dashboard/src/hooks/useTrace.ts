@@ -6,7 +6,8 @@ import { fetchTrace } from "../lib/ipfs";
  * Lazy IPFS trace fetcher. Only fires when `enabled` is true (default false).
  * Components flip `enabled` when the user expands the "Why?" disclosure.
  *
- * staleTime: Infinity — traces are immutable once anchored, never refetch.
+ * staleTime + gcTime Infinity — traces are immutable once anchored, so a CID is
+ * fetched at most once per session even if the disclosure is reopened or remounted.
  */
 export function useTrace(cid: string, enabled: boolean) {
   return useQuery({
@@ -14,6 +15,7 @@ export function useTrace(cid: string, enabled: boolean) {
     queryFn: () => fetchTrace(cid),
     enabled: enabled && !!cid,
     staleTime: Infinity,
-    retry: false, // fetchTrace already races 3 gateways; no further retry needed
+    gcTime: Infinity,
+    retry: false, // fetchTrace already falls through gateways; no further retry needed
   });
 }

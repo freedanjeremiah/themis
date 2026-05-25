@@ -1,6 +1,9 @@
 /**
- * Fetch a trace JSON object by IPFS CID, racing multiple gateways.
- * The first 200 OK wins. Throws if all gateways fail.
+ * Fetch a trace JSON object by IPFS CID. Tries public gateways in order and
+ * returns the first 200 OK — sequential, so the common case is a single request.
+ *
+ * Pinata is deliberately NOT in this list: it's reserved for *pinning* (the
+ * agents), and reading through its gateway burns the free request quota.
  *
  * CID may be supplied as:
  *   - `ipfs://Qm...` (preferred from agents)
@@ -8,8 +11,8 @@
  *   - bare `Qm...` (treated as IPFS)
  */
 const GATEWAYS = [
-  "https://gateway.pinata.cloud/ipfs",
   "https://ipfs.io/ipfs",
+  "https://dweb.link/ipfs",
   "https://cf-ipfs.com/ipfs",
 ];
 
@@ -31,19 +34,17 @@ export async function fetchTrace(cid: string): Promise<unknown> {
   if (!normalized)
     throw new TraceUnavailableError("not published to IPFS");
 
-  const attempts = GATEWAYS.map(async (gw) => {
-    const resp = await fetch(`${gw}/${normalized}`, {
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!resp.ok) throw new Error(`${gw}: HTTP ${resp.status}`);
-    return resp.json();
-  });
-
-  try {
-    return await Promise.any(attempts);
-  } catch {
-    throw new TraceUnavailableError(
-      `all ${GATEWAYS.length} gateways failed`
-    );
+  // Sequential with a per-gateway timeout: only fall through to the next
+  // gateway if the current one fails, so a healthy first gateway = one request.
+  for (const gw of GATEWAYS) {
+    try {
+      const resp = await fetch(`${gw}/${normalized}`, {
+        signal: AbortSignal.timeout(7_000),
+      });
+      if (resp.ok) return await resp.json();
+    } catch {
+      /* try next gateway */
+    }
   }
+  throw new TraceUnavailableError(`all ${GATEWAYS.length} gateways failed`);
 }
