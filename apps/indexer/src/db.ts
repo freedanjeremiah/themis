@@ -60,8 +60,11 @@ export const insertTrace = db.prepare(
 export const getRecentTraces = db.prepare(
   `SELECT * FROM traces ORDER BY block_time DESC LIMIT ?`
 );
+// Order by id (insertion order = chronological, since backfill inserts in block
+// order) NOT block_time — backfill stamps every row with the same insertion
+// timestamp, so block_time can't distinguish the latest settlement.
 export const getLatestTotalAssets = db.prepare(
-  `SELECT total_assets FROM settlements ORDER BY block_time DESC LIMIT 1`
+  `SELECT total_assets FROM settlements ORDER BY id DESC LIMIT 1`
 );
 export const getDepositCount = db.prepare(
   `SELECT COUNT(DISTINCT wallet) as count FROM deposits`

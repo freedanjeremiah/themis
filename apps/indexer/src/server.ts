@@ -6,11 +6,26 @@ import {
   getRecentTraces,
   getLatestTotalAssets,
   getDepositCount,
-  getAgentAllocations,
   getAgentPnlHistory,
   getAgentSettlementCount,
 } from "./db.js";
 import { WsMessage } from "@themis/shared";
+import { ethers } from "ethers";
+import { ThemisVaultABI } from "@themis/shared/abis";
+import * as dotenv from "dotenv";
+dotenv.config({ path: "../../.env" });
+
+// Live vault reads for the snapshot fields (current allocation), so the
+// leaderboard/reserve reflect on-chain truth rather than cumulative event sums.
+const _provider = process.env.ARC_RPC_URL ? new ethers.JsonRpcProvider(process.env.ARC_RPC_URL) : null;
+const _vault = _provider && process.env.VAULT_ADDRESS
+  ? new ethers.Contract(process.env.VAULT_ADDRESS, ThemisVaultABI as ethers.InterfaceAbi, _provider)
+  : null;
+const AGENT_ADDR: Record<string, string | undefined> = {
+  hermes: process.env.AGENT_ADDRESS_HERMES,
+  pythia: process.env.AGENT_ADDRESS_PYTHIA,
+  demeter: process.env.AGENT_ADDRESS_DEMETER,
+};
 
 function computeSharpe(pnls: number[]): number {
   if (pnls.length < 2) return 0;
@@ -71,24 +86,22 @@ app.get("/traces", (req, res) => {
   res.json(getRecentTraces.all(limit));
 });
 
-app.get("/agents", (_req, res) => {
-  const allocations = getAgentAllocations.all() as { agent_id: string; total: number }[];
-  const agents = ["hermes", "pythia", "demeter"].map(id => {
-    const alloc = allocations.find(a => a.agent_id === id);
+app.get("/agents", async (_req, res) => {
+  const agents = await Promise.all(["hermes", "pythia", "demeter"].map(async id => {
     const pnlHistory = getAgentPnlHistory.all(id) as { pnl: number; timestamp: number }[];
     const { count } = getAgentSettlementCount.get(id) as { count: number };
     const pnls = pnlHistory.map(r => r.pnl);
     const sharpe = computeSharpe(pnls);
     const maxDrawdown = computeMaxDrawdown(pnls);
-    return {
-      agentId: id,
-      currentAllocationUsdc: alloc?.total ?? 0,
-      tradesCompleted: count,
-      sharpe,
-      maxDrawdown,
-      pnlHistory,
-    };
-  });
+    // CURRENT allocation, read live from the vault (0 between cycles, set while
+    // an agent holds a position). NOT the cumulative sum of all allocations.
+    let currentAllocationUsdc = 0;
+    const addr = AGENT_ADDR[id];
+    if (_vault && addr) {
+      try { currentAllocationUsdc = Number(await _vault.agentAllocation(addr)); } catch { /* read failed → 0 */ }
+    }
+    return { agentId: id, currentAllocationUsdc, tradesCompleted: count, sharpe, maxDrawdown, pnlHistory };
+  }));
   res.json(agents);
 });
 

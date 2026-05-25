@@ -79,8 +79,9 @@ export default function Home() {
     fetch(`${indexerUrl}/tvl`)
       .then(r => r.ok ? r.json() : null)
       .then((data: unknown) => {
-        const d = data as { totalUsdc?: number } | null;
-        if (d?.totalUsdc) setTvl(d.totalUsdc);
+        const d = data as { totalUsdc?: number; depositCount?: number } | null;
+        if (typeof d?.totalUsdc === "number") setTvl(d.totalUsdc);
+        if (typeof d?.depositCount === "number") setDepositCount(d.depositCount);
       })
       .catch(() => {});
 

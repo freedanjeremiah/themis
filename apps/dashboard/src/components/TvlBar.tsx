@@ -1,5 +1,4 @@
 "use client";
-import CountUp from "react-countup";
 
 type Props = { tvlUsdc: number; depositCount: number };
 
@@ -9,7 +8,7 @@ export function TvlBar({ tvlUsdc, depositCount }: Props) {
       <div>
         <p className="text-xs text-gray-400 uppercase tracking-wider">Total Value Locked</p>
         <p className="text-4xl font-bold text-green-400 font-mono">
-          $<CountUp end={tvlUsdc / 1e6} decimals={2} duration={0.8} preserveValue />
+          ${(tvlUsdc / 1e6).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </p>
         <p className="text-xs text-gray-500 mt-1">
           {depositCount} depositor{depositCount !== 1 ? "s" : ""}
