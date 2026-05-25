@@ -75,5 +75,12 @@ export const getAgentPnlHistory = db.prepare(
 export const getAgentSettlementCount = db.prepare(
   `SELECT COUNT(*) as count FROM settlements WHERE agent_id=?`
 );
+export const hasTxHash = db.prepare(
+  `SELECT 1 FROM (
+    SELECT tx_hash FROM deposits UNION ALL
+    SELECT tx_hash FROM allocations UNION ALL
+    SELECT tx_hash FROM settlements
+  ) WHERE tx_hash=?`
+);
 
 export default db;
