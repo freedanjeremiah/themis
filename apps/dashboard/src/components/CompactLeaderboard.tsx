@@ -18,8 +18,14 @@ const SPARK_COLOR: Record<string, string> = {
   demeter: "#34d399",
 };
 
+const DEPOSIT_RAW = 10_000_000; // $10 per agent in raw USDC (6 decimals)
+
 export function CompactLeaderboard({ agents }: { agents: AgentRow[] }) {
-  const sorted = [...agents].sort((a, b) => b.allocationUsdc - a.allocationUsdc);
+  const withPnl = agents.map(a => ({
+    ...a,
+    cumPnlRaw: a.pnlHistory.reduce((s, p) => s + p.pnl, 0),
+  }));
+  const sorted = [...withPnl].sort((a, b) => b.cumPnlRaw - a.cumPnlRaw);
 
   return (
     <section className="space-y-3">
@@ -27,9 +33,8 @@ export function CompactLeaderboard({ agents }: { agents: AgentRow[] }) {
         Leaderboard
       </h2>
       {sorted.map(agent => {
-        const pct = agent.totalUsdc > 0
-          ? ((agent.allocationUsdc / agent.totalUsdc) * 100).toFixed(1)
-          : "0.0";
+        const pct = ((agent.cumPnlRaw / DEPOSIT_RAW) * 100).toFixed(2);
+        const pctNum = agent.cumPnlRaw / DEPOSIT_RAW * 100;
         const sparkColor = SPARK_COLOR[agent.agentId] ?? "#fff";
 
         return (
@@ -43,7 +48,9 @@ export function CompactLeaderboard({ agents }: { agents: AgentRow[] }) {
                     Sidelined
                   </span>
                 )}
-                <span className="text-base font-mono font-bold text-white">{pct}%</span>
+                <span className={`text-base font-mono font-bold ${pctNum >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  {pctNum >= 0 ? "+" : ""}{pct}%
+                </span>
               </div>
             </div>
             <div className="flex justify-between text-[11px] text-gray-400 mb-1">

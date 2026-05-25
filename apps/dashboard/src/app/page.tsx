@@ -76,6 +76,14 @@ export default function Home() {
   useEffect(() => {
     const indexerUrl = process.env.NEXT_PUBLIC_INDEXER_URL ?? "http://localhost:3002";
 
+    fetch(`${indexerUrl}/tvl`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: unknown) => {
+        const d = data as { totalUsdc?: number } | null;
+        if (d?.totalUsdc) setTvl(d.totalUsdc);
+      })
+      .catch(() => {});
+
     fetch(`${indexerUrl}/traces?limit=20`)
       .then(r => r.ok ? r.json() : null)
       .then((data: unknown) => {
