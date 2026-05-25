@@ -43,7 +43,7 @@ export function TraceCard({ trace }: { trace: TraceItem }) {
 
       <div className="flex gap-3 mt-2">
         {trace.cid && !trace.cid.startsWith("hash://") && (
-          <a href={trace.cid.replace("ipfs://", "https://ipfs.io/ipfs/")}
+          <a href={trace.cid.replace("ipfs://", "https://gateway.pinata.cloud/ipfs/")}
             target="_blank" rel="noreferrer"
             className="text-xs text-blue-400 hover:underline">View raw ↗</a>
         )}
