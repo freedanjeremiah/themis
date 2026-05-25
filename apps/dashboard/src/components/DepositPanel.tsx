@@ -23,6 +23,17 @@ const ERC20_ABI = [
     outputs: [{ type: "uint256" }] },
 ] as const;
 
+const VAULT_READ_ABI = [
+  { name: "shareBalances", type: "function", stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }], outputs: [{ type: "uint256" }] },
+  { name: "sharePrice", type: "function", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }] },
+  { name: "totalShares", type: "function", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }] },
+  { name: "totalAssets", type: "function", stateMutability: "view",
+    inputs: [], outputs: [{ type: "uint256" }] },
+] as const;
+
 const USDC_ADDRESS = "0x3600000000000000000000000000000000000000" as const;
 
 const VAULT_ADDRESS = (process.env.NEXT_PUBLIC_VAULT_ADDRESS ?? "") as `0x${string}`;
@@ -41,6 +52,7 @@ export function DepositPanel({
   prefillNonce?: number;
 }) {
   const [tab, setTab] = useState<"deposit" | "withdraw">("deposit");
+  const [withdrawMode, setWithdrawMode] = useState<"usdc" | "shares">("usdc");
   const [amount, setAmount] = useState("");
   useEffect(() => {
     if (typeof prefilledAmount === "number" && prefilledAmount > 0) {
@@ -67,9 +79,45 @@ export function DepositPanel({
     query: { enabled: !!address },
   });
 
+  const { data: shareBalanceRaw } = useReadContract({
+    address: VAULT_ADDRESS,
+    abi: VAULT_READ_ABI,
+    functionName: "shareBalances",
+    args: [address ?? "0x0000000000000000000000000000000000000000"],
+    query: { enabled: !!address },
+  });
+
+  const { data: sharePriceRaw } = useReadContract({
+    address: VAULT_ADDRESS,
+    abi: VAULT_READ_ABI,
+    functionName: "sharePrice",
+    query: { enabled: !!address },
+  });
+
+  const { data: totalSharesRaw } = useReadContract({
+    address: VAULT_ADDRESS,
+    abi: VAULT_READ_ABI,
+    functionName: "totalShares",
+    query: { enabled: !!address },
+  });
+
+  const { data: totalAssetsRaw } = useReadContract({
+    address: VAULT_ADDRESS,
+    abi: VAULT_READ_ABI,
+    functionName: "totalAssets",
+    query: { enabled: !!address },
+  });
+
   const deposited = depositedRaw ? Number(formatUnits(depositedRaw as bigint, 6)) : 0;
   const usdcBalance = usdcBalanceRaw ? Number(formatUnits(usdcBalanceRaw as bigint, 6)) : 0;
   const remaining = Math.max(0, WALLET_CAP_USDC - deposited);
+
+  const shareBalance = shareBalanceRaw ? (shareBalanceRaw as bigint) : 0n;
+  const sharePriceBig = sharePriceRaw ? (sharePriceRaw as bigint) : 1_000_000n;
+  const totalSharesBig = totalSharesRaw ? (totalSharesRaw as bigint) : 0n;
+  const totalAssetsBig = totalAssetsRaw ? (totalAssetsRaw as bigint) : 0n;
+  // withdrawable USDC = shares * sharePrice / 1e6
+  const withdrawableUsdc = Number(shareBalance) * Number(sharePriceBig) / 1e12;
 
   const { writeContractAsync } = useWriteContract();
 
@@ -112,13 +160,47 @@ export function DepositPanel({
 
   async function handleWithdraw() {
     if (!amount || !address) return;
+
     let sharesAmount: bigint;
-    try {
-      sharesAmount = parseUnits(amount, 6);
-    } catch {
-      setError("Invalid amount");
-      return;
+    if (withdrawMode === "shares") {
+      try {
+        sharesAmount = parseUnits(amount, 6);
+      } catch {
+        setError("Invalid share amount");
+        return;
+      }
+      if (sharesAmount <= 0n) { setError("Amount must be greater than 0"); return; }
+      if (sharesAmount > shareBalance) {
+        setError(`Insufficient shares. You have ${formatUnits(shareBalance, 6)} shares.`);
+        return;
+      }
+    } else {
+      let usdcAmount: bigint;
+      try {
+        usdcAmount = parseUnits(amount, 6);
+      } catch {
+        setError("Invalid amount");
+        return;
+      }
+      if (usdcAmount <= 0n) { setError("Amount must be greater than 0"); return; }
+
+      // Convert USDC to shares: shares = usdcAmount * totalShares / totalAssets
+      if (totalAssetsBig === 0n || totalSharesBig === 0n) {
+        sharesAmount = usdcAmount;
+      } else {
+        sharesAmount = (usdcAmount * totalSharesBig) / totalAssetsBig;
+      }
+
+      if (sharesAmount > shareBalance) {
+        setError(`Insufficient balance. You have $${withdrawableUsdc.toFixed(2)} withdrawable.`);
+        return;
+      }
+      if (sharesAmount === 0n) {
+        setError("Amount too small to convert to shares");
+        return;
+      }
     }
+
     setError(null);
     setStep("withdrawing");
     try {
@@ -130,7 +212,14 @@ export function DepositPanel({
       });
       setAmount("");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message.slice(0, 80) : "Transaction failed");
+      const msg = e instanceof Error ? e.message : "Transaction failed";
+      if (msg.includes("InsufficientLiquidity") || msg.includes("insufficient")) {
+        setError("Insufficient liquid reserve — agents have funds deployed. Try again after the cycle settles.");
+      } else if (msg.includes("invalid shares")) {
+        setError("Share balance mismatch. Refresh and try again.");
+      } else {
+        setError(msg.slice(0, 120));
+      }
     } finally {
       setStep("idle");
     }
@@ -152,7 +241,7 @@ export function DepositPanel({
           {(["deposit", "withdraw"] as const).map(t => (
             <button
               key={t}
-              onClick={() => { setTab(t); setAmount(""); setError(null); }}
+              onClick={() => { setTab(t); setAmount(""); setError(null); setWithdrawMode("usdc"); }}
               className={`press px-4 py-1 text-2xs font-semibold uppercase tracking-[0.1em] ${
                 tab === t ? "bg-ink text-paper" : "text-ink-3 hover:text-ink"
               }`}
@@ -178,20 +267,67 @@ export function DepositPanel({
                 <span>Cap left <span className="tnum text-ink-2">${remaining.toFixed(2)}</span></span>
               </div>
             )}
+            {tab === "withdraw" && (
+              <div className="flex items-center justify-between text-xs text-ink-3">
+                <span>
+                  {withdrawMode === "usdc"
+                    ? <>Withdrawable <span className="tnum text-ink-2">${withdrawableUsdc.toFixed(2)}</span></>
+                    : <>Shares <span className="tnum text-ink-2">{formatUnits(shareBalance, 6)}</span></>
+                  }
+                </span>
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex border border-ink/20 text-2xs">
+                    {(["usdc", "shares"] as const).map(m => (
+                      <button
+                        key={m}
+                        onClick={() => { setWithdrawMode(m); setAmount(""); setError(null); }}
+                        className={`px-2 py-0.5 font-semibold uppercase tracking-[0.08em] ${
+                          withdrawMode === m ? "bg-ink text-paper" : "text-ink-3 hover:text-ink"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setAmount(
+                      withdrawMode === "usdc"
+                        ? withdrawableUsdc.toFixed(6)
+                        : formatUnits(shareBalance, 6)
+                    )}
+                    className="text-accent hover:underline"
+                  >
+                    Max
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-baseline border-b border-ink/30 focus-within:border-accent">
-              <span className="pointer-events-none font-serif text-2xl text-ink-3">$</span>
+              {(tab === "deposit" || withdrawMode === "usdc") && (
+                <span className="pointer-events-none font-serif text-2xl text-ink-3">$</span>
+              )}
               <input
                 type="number"
                 inputMode="decimal"
                 min="0"
-                max={tab === "deposit" ? remaining : undefined}
-                placeholder={tab === "deposit" ? remaining.toFixed(0) : "Shares"}
+                max={
+                  tab === "deposit" ? remaining
+                  : withdrawMode === "usdc" ? withdrawableUsdc
+                  : Number(formatUnits(shareBalance, 6))
+                }
+                placeholder={
+                  tab === "deposit" ? remaining.toFixed(0)
+                  : withdrawMode === "usdc" ? withdrawableUsdc.toFixed(2)
+                  : formatUnits(shareBalance, 6)
+                }
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
                 className="w-full bg-transparent py-1.5 pl-1 font-serif text-2xl tnum text-ink placeholder-ink/25 focus:outline-none"
               />
-              <span className="label shrink-0">{tab === "deposit" ? "USDC" : "shares"}</span>
+              <span className="label shrink-0">
+                {tab === "deposit" ? "USDC" : withdrawMode === "usdc" ? "USDC" : "shares"}
+              </span>
             </div>
 
             {tab === "deposit" && (
