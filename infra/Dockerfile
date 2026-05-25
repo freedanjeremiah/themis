@@ -71,6 +71,13 @@ WORKDIR /app/apps/agent-pythia
 CMD ["pnpm", "start"]
 
 FROM base AS agent-demeter
+# Pre-create the per-cycle state file owned by the runtime user. demeter writes
+# its open-position slot to /app/apps/agent-demeter/.shares-held.json, which lives
+# in a root-owned image layer; without this the non-root themis user hits EACCES.
+# Baking it into the image (vs a volume) means it survives container recreation
+# with no operator chown step.
+RUN touch /app/apps/agent-demeter/.shares-held.json \
+ && chown themis:themis /app/apps/agent-demeter /app/apps/agent-demeter/.shares-held.json
 USER themis
 WORKDIR /app/apps/agent-demeter
 CMD ["pnpm", "start"]
