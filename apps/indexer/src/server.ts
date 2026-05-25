@@ -1,4 +1,4 @@
-import express from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import {
@@ -37,6 +37,12 @@ function computeMaxDrawdown(pnls: number[]): number {
 }
 
 export const app = express();
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  next();
+});
 app.use(express.json());
 const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer });

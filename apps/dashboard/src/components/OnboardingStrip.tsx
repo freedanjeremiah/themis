@@ -1,10 +1,28 @@
 "use client";
-import { useConnect, useSwitchChain } from "wagmi";
+import { useConnect } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { useOnboardingStep, type OnboardingStep } from "../hooks/useOnboardingStep";
 
 const ARC_TESTNET_CHAIN_ID = 5042002;
+const ARC_CHAIN_PARAMS = {
+  chainId: "0x4CEF52" as const, // 5042002 in hex
+  chainName: "Arc Testnet",
+  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 6 },
+  rpcUrls: ["https://rpc.testnet.arc.network"],
+  blockExplorerUrls: [] as string[],
+};
 const FAUCET_URL = process.env.NEXT_PUBLIC_FAUCET_URL ?? "https://docs.arc.network/testnet";
+
+async function addAndSwitchToArc() {
+  const provider = (window as any).ethereum;
+  if (!provider) return;
+  try {
+    await provider.request({ method: "wallet_addEthereumChain", params: [ARC_CHAIN_PARAMS] });
+  } catch {
+    // already added — just switch
+    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: ARC_CHAIN_PARAMS.chainId }] });
+  }
+}
 
 const STEPS: Array<{ id: OnboardingStep; label: string }> = [
   { id: 1, label: "Connect wallet" },
@@ -20,7 +38,6 @@ export function OnboardingStrip({
 }) {
   const { step, dismissed, dismiss, address } = useOnboardingStep();
   const { connect } = useConnect();
-  const { switchChain } = useSwitchChain();
 
   if (dismissed || step >= 4) return null;
 
@@ -35,7 +52,7 @@ export function OnboardingStrip({
         );
       case 1:
         return (
-          <button onClick={() => switchChain({ chainId: ARC_TESTNET_CHAIN_ID })}
+          <button onClick={addAndSwitchToArc}
             className="bg-blue-600 hover:bg-blue-500 text-white text-sm rounded px-4 py-2 font-semibold">
             Add / switch to Arc testnet
           </button>

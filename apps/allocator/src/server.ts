@@ -4,6 +4,12 @@ import { recordSettlement } from "./cycle.js";
 import { AgentProposal, AgentId } from "@themis/shared";
 
 export const app = express();
+app.use((_, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  next();
+});
 app.use(express.json());
 
 app.post("/proposals", (req, res) => {

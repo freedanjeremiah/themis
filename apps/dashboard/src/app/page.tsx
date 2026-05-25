@@ -75,6 +75,23 @@ export default function Home() {
 
   useEffect(() => {
     const indexerUrl = process.env.NEXT_PUBLIC_INDEXER_URL ?? "http://localhost:3002";
+
+    fetch(`${indexerUrl}/traces?limit=20`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: unknown) => {
+        if (!Array.isArray(data)) return;
+        setTraces((data as Array<Record<string, unknown>>).map(r => ({
+          id: r.id as number,
+          agentId: (r.agentId ?? r.agent_id) as string,
+          cid: r.cid as string,
+          hash: r.hash as string,
+          tradeIdea: (r.tradeIdea ?? r.trade_idea) as string,
+          confidence: r.confidence as number,
+          blockTime: (r.blockTime ?? r.block_time) as number,
+        })));
+      })
+      .catch(() => {});
+
     fetch(`${indexerUrl}/agents`)
       .then(r => r.ok ? r.json() : null)
       .then((data: unknown) => {
