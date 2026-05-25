@@ -126,19 +126,20 @@ app.get("/state", (_req, res) => {
 
 // Agents POST trace metadata here after anchoring
 app.post("/traces", (req, res) => {
-  const { agentId, cid, hash, tradeIdea, confidence } = req.body as {
+  const { agentId, cid, hash, tradeIdea, confidence, reasoning } = req.body as {
     agentId?: string;
     cid?: string;
     hash?: string;
     tradeIdea?: string;
     confidence?: number;
+    reasoning?: string;
   };
   if (!agentId || !cid || !hash) {
     return res.status(400).json({ error: "missing required fields" });
   }
   const blockTime = Math.floor(Date.now() / 1000);
-  insertTrace.run(agentId, cid, hash, tradeIdea ?? "", confidence ?? 0, blockTime);
-  broadcast({ event: "trace", data: { agentId, cid, hash, tradeIdea, confidence, blockTime } });
+  insertTrace.run(agentId, cid, hash, tradeIdea ?? "", confidence ?? 0, reasoning ?? "", blockTime);
+  broadcast({ event: "trace", data: { agentId, cid, hash, tradeIdea, confidence, reasoning, blockTime } });
   res.json({ ok: true });
 });
 

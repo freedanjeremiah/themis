@@ -10,6 +10,7 @@ export type TraceItem = {
   tradeIdea: string;
   confidence: number;
   blockTime: number;
+  reasoning?: string;
 };
 
 function tweetText(t: TraceItem): string {
@@ -63,7 +64,7 @@ export function TraceCard({ trace, fresh = false }: { trace: TraceItem; fresh?: 
         </a>
       </div>
 
-      <WhyExpandable cid={trace.cid} />
+      <WhyExpandable cid={trace.cid} reasoning={trace.reasoning} />
     </article>
   );
 }

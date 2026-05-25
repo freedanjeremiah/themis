@@ -124,6 +124,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         tradeIdea: (r.tradeIdea ?? r.trade_idea) as string,
         confidence: r.confidence as number,
         blockTime: (r.blockTime ?? r.block_time) as number,
+        reasoning: (r.reasoning ?? "") as string,
       })));
     }).catch(() => {});
 

@@ -53,6 +53,7 @@ export async function anchorTrace(
       hash,
       tradeIdea,
       confidence,
+      reasoning: (traceJson as any)?.proposal?.reasoning ?? (traceJson as any)?.reasoning ?? "",
     });
   } catch { /* non-fatal */ }
 

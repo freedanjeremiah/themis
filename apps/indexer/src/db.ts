@@ -41,9 +41,13 @@ db.exec(`
     hash TEXT NOT NULL,
     trade_idea TEXT NOT NULL,
     confidence REAL NOT NULL,
+    reasoning TEXT NOT NULL DEFAULT '',
     block_time INTEGER NOT NULL
   );
 `);
+
+// Migration for DBs created before the reasoning column existed (idempotent).
+try { db.exec("ALTER TABLE traces ADD COLUMN reasoning TEXT NOT NULL DEFAULT ''"); } catch { /* already present */ }
 
 export const insertDeposit = db.prepare(
   `INSERT INTO deposits (wallet, amount_usdc, shares, tx_hash, block_time) VALUES (?,?,?,?,?)`
@@ -55,7 +59,7 @@ export const insertSettlement = db.prepare(
   `INSERT INTO settlements (agent_id, pnl_usdc, total_assets, tx_hash, block_time) VALUES (?,?,?,?,?)`
 );
 export const insertTrace = db.prepare(
-  `INSERT INTO traces (agent_id, cid, hash, trade_idea, confidence, block_time) VALUES (?,?,?,?,?,?)`
+  `INSERT INTO traces (agent_id, cid, hash, trade_idea, confidence, reasoning, block_time) VALUES (?,?,?,?,?,?,?)`
 );
 export const getRecentTraces = db.prepare(
   `SELECT * FROM traces ORDER BY block_time DESC LIMIT ?`
