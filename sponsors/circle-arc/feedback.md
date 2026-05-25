@@ -1,141 +1,101 @@
 # Circle / Arc — Builder Feedback (Themis, Agora Hackathon 2026)
 
-> Specific, actionable feedback gathered while building Themis — a multi-agent
-> on-chain hedge fund — on Arc testnet during the Agora hackathon.
-> Integration surface: ThemisVault + ThemisRegistry (Solidity 0.8.24),
-> an ethers v6 event indexer, three AI trading agents, and a Next.js/wagmi v2
-> dashboard — all settling in USDC on Arc testnet (chainId 5042002).
+> Notes we took while building Themis, a multi-agent on-chain hedge fund, on Arc testnet.
+> Where we touched Arc: ThemisVault + ThemisRegistry (Solidity 0.8.24), an ethers v6
+> event indexer, three AI trading agents, and a Next.js / wagmi v2 dashboard, all
+> settling in USDC on Arc testnet (chainId 5042002).
 
----
+## What worked
 
-## 1. What worked well
+**USDC as the native gas token is the best part.** No paymaster to wire up, so a vault
+can custody the gas token directly, agent wallets top up once and run on their own, and
+the story we tell depositors stays simple: one token, one mental model. We stopped
+thinking about gas after day one, which is about the highest praise we can give a design
+decision.
 
-**USDC as the native gas token is genuinely elegant.**
-Removing the Paymaster dance means a vault contract can custody the gas token
-directly, agent wallets top up once and run autonomously, and the accounting
-story for depositors is clean: one token, one mental model. This is the right
-design and it showed during the build.
+**Throughput held up for tight agent cycles.** Three agents plus an allocator firing
+on-chain `allocate` / `settle` calls every cycle, no congestion, and block times steady
+enough that `waitForTransactionReceipt` behaved predictably. We never had to babysit it.
 
-**Testnet throughput was sufficient for tight agent cycles.**
-20-minute cycles with three concurrent agents + an allocator making on-chain
-`allocate` / `settle` calls ran without congestion. Block time felt consistent
-enough to write reliable `waitForTransactionReceipt` flows.
+**CCTP V2 being there mattered even though we dropped it.** We designed around a real
+Arc to HyperEVM bridge path, then swapped it for pre-funded wallets under deadline
+pressure. Having a credible bridge meant we could architect the right thing first and
+cut later, instead of the reverse.
 
-**CCTP V2 exists when you need cross-chain liquidity.**
-Having a credible Arc → HyperEVM bridge path (even if we ultimately replaced it
-with pre-funded wallets under deadline pressure) meant the architecture could
-be designed correctly from the start.
+## Bugs and sharp edges we hit
 
----
+### eth_newFilter subscriptions die silently after an RPC reconnect
 
-## 2. Reproducible bugs / sharp edges
+Filter-based subscriptions (`contract.on(...)` in ethers v6) hand you a `filterId` that
+the Arc testnet RPC doesn't keep across reconnects. After a reconnect, every
+`eth_getFilterChanges` comes back `filter not found` and events just stop. The listener
+looks alive and delivers nothing, so there's nothing to catch.
 
-### 2.1 `eth_newFilter` subscriptions silently stop after RPC reconnect
+This bit us where it hurts: the indexer quietly missed `Deposited`, `Allocated`, and
+`Settled` events until we noticed the dashboard had gone stale. We ended up rewriting the
+whole listener layer to poll `eth_getLogs` with manual block-range chunking.
 
-**Observed.** `eth_newFilter`-based subscriptions (`contract.on(...)` in
-ethers v6) return a `filterId` that the Arc testnet RPC does not persist across
-reconnects. After any reconnect, every subsequent `eth_getFilterChanges` call
-returns `filter not found`. Events stop arriving with no error surface to the
-application — the listener appears alive but delivers nothing.
+What would help: persist filter state across sessions, or at least return a real error on
+a dead filter so clients can re-subscribe. Failing that, say so loudly in the testnet RPC
+docs.
 
-**Impact.** Our indexer missed `Deposited`, `Allocated`, and `Settled` events
-silently until we noticed the dashboard going stale. We rewrote the entire
-listener layer to poll `eth_getLogs` with manual block-range chunking.
+### eth_getLogs has an undocumented block-range cap (~10k)
 
-**Ask.** Either persist filter state across RPC sessions, or return a clear
-error on `eth_getFilterChanges` for an expired filter so clients can
-re-subscribe. At minimum, document this loudly in the testnet RPC reference.
+Ask for more than roughly 10,000 blocks and you get an opaque error, no code and no
+mention of a limit. We found the ceiling by trial and error and now chunk every query at
+9,000 blocks. Putting the number in the error body (and the docs) would save every team
+from rediscovering it independently.
 
-### 2.2 `eth_getLogs` has an undocumented block-range cap (~10 k blocks)
+### USYC Teller reverts with an undecoded custom error on testnet
 
-**Observed.** `eth_getLogs` requests spanning more than roughly 10 000 blocks
-return an opaque error (no standard error code, no mention of the limit in the
-message). We discovered the cap empirically and now chunk all log queries at
-9 000 blocks with a manual loop.
+`teller.deposit(...)` reverts with a custom error we couldn't decode, and it looks like a
+KYC / allow-list gate that's active with no open path around it. That blocks the
+stablecoin yield use case, which is one of Arc's headline stories, so we fell back to a
+simulated 5.2% APY computed off-chain just to keep the agent cycling. An open testnet
+allow-list, or even a readable revert reason telling us which gate we hit, would unblock
+this for every builder.
 
-**Ask.** Document the exact block-range limit. Ideally surface it in the error
-body: `{ "code": -32005, "message": "block range exceeds 10000" }` (the
-Ethereum standard for this case). Without the number in the error, every team
-discovers it independently.
+## Docs we wish existed
 
-### 2.3 USYC Teller reverts with an unknown custom error on testnet
+**A "configure viem / wagmi / ethers for Arc" snippet.** USDC-as-native-gas quietly
+breaks a common assumption: most libraries and UI components expect an 18-decimal ETH
+native currency. On Arc you have to declare `nativeCurrency` as USDC at 6 decimals
+(`0x3600000000000000000000000000000000000000`). Miss it and the damage is silent:
+balances render as `0.000010` instead of `10.00`, gas estimates come out wrong, and
+wallet UIs show the wrong symbol. One canonical chain-object snippet would save everyone
+the same afternoon.
 
-**Observed.** `teller.deposit(...)` on the USYC Teller contract reverts with
-an undecoded custom error — appears to be a KYC / allow-list gate that is
-active on testnet with no open path around it.
+**An explorer, or any tx-status endpoint.** With no explorer on testnet, checking whether
+a tx landed, reading a revert reason, or inspecting contract state all meant writing
+one-off RPC scripts. That's slow, especially for custom Solidity errors where you need the
+ABI to decode the revert. Even a minimal "tx hash to receipt and logs" page, or
+`debug_traceTransaction`, would speed up the contract loop a lot.
 
-**Impact.** The stablecoin yield-rotation use case (one of Arc's headline
-stories) is effectively blocked on testnet. We fell back to a simulated yield
-model (5.2% APY, computed off-chain) just to keep the agent running.
+**A canonical faucet link.** There's no single discoverable faucet for Arc testnet USDC.
+We found Circle's generic one on our own and linked it from the dashboard. A pinned link
+in Discord and the docs matters more than it sounds, especially for judges trying to
+reproduce a demo.
 
-**Ask.** Either open a testnet allow-list path (e.g. auto-approve any address
-that requests it via a faucet-style endpoint), or surface a human-readable
-revert reason so integrators know immediately what gate they are hitting and
-how to request access.
+**A "what's actually deployed on testnet" page.** We wrote Aave v3 integration code before
+finding out it isn't on Arc testnet. A short table (protocol to address, or "not
+available") would let teams scope integrations correctly up front.
 
----
+## The short version
 
-## 3. Documentation gaps
+| Ask | Why it matters |
+|---|---|
+| Persist `eth_newFilter` across reconnects (or error clearly) | Event-driven indexers silently break on Arc today; the getLogs-polling workaround adds real complexity. |
+| Document the `eth_getLogs` block-range cap, with the limit in the error | Every team finds this the hard way. The number in the error plus a docs line ends the surprise. |
+| Open a USYC Teller testnet path | Stablecoin yield rotation is an Arc flagship use case, and a KYC-gated contract blocks it for everyone. |
+| Ship an "Arc chain config" snippet for viem / wagmi / ethers | USDC-as-native-gas is novel, the config is non-obvious, and the failure mode is silent. One code block fixes it for good. |
+| Host a minimal explorer or expose `debug_traceTransaction` | Debugging contracts blind is painful. Even tx hash to receipt and decoded logs would help. |
+| Publish a stable faucet URL | Needed for judges replicating demos and for onboarding teammates mid-hackathon. |
+| Publish a deployed-protocol list | One page of what is and isn't on testnet (Aave, USYC, others) so teams scope correctly. |
 
-### 3.1 No "configuring viem / wagmi / ethers for Arc" guide
+## Bottom line
 
-USDC-as-native-gas breaks a widespread tooling assumption: most libraries,
-type definitions, and UI components treat the native currency as 18-decimal
-ETH. On Arc, `chain.nativeCurrency` must be declared as USDC (6 decimals,
-`0x3600000000000000000000000000000000000000`). Without documentation, teams
-hit silent display bugs (balances shown as `0.000010` instead of `10.00`),
-incorrect gas estimation, and wallet-connect UI showing the wrong symbol.
-
-A single "Arc chain object for viem/wagmi/ethers" snippet in the docs would
-save every team the same 2–3 hours of debugging.
-
-### 3.2 No block explorer / no tx-status endpoint during the hackathon
-
-With no working explorer on Arc testnet, verifying whether a transaction
-landed, inspecting revert reasons, and checking contract state during
-development required writing bespoke scripts against the RPC. This significantly
-slowed the contract debugging loop — especially for custom Solidity errors,
-where the ABI is needed to decode the revert.
-
-**Ask.** A hosted explorer (even a minimal one — tx hash → status + logs) or
-a `debug_traceTransaction` endpoint. Either meaningfully accelerates builder
-iteration speed.
-
-### 3.3 No canonical faucet URL
-
-There is no single, discoverable faucet for Arc testnet USDC. We found the
-Circle generic faucet independently and linked to it from our dashboard. A
-pinned link in the Discord + developer docs would save every hackathon team
-this search, and is especially important for judges trying to replicate a demo.
-
-### 3.4 Deployed protocol inventory
-
-We discovered late that Aave v3 is not deployed on Arc testnet — after
-building integration code for it. A short "what's deployed on testnet" table
-(protocol → contract address or "not available") in the docs would let teams
-scope correctly from the start.
-
----
-
-## 4. Feature requests
-
-| # | Feature | Why |
-|---|---|---|
-| 1 | **Persistent `eth_newFilter` across reconnects** | Without this, all event-driven indexers are broken on Arc testnet. Poll-getLogs workarounds add significant complexity. |
-| 2 | **Documented `eth_getLogs` block-range limit with structured error** | Every team discovers this empirically. Structured error + docs would eliminate the surprise. |
-| 3 | **Open USYC Teller testnet path** | Stablecoin yield rotation is an Arc flagship use case. A KYC-gated testnet contract blocks it for every builder. |
-| 4 | **"Arc chain config" snippet for viem / wagmi / ethers in docs** | USDC-as-native-gas is novel; the config is non-obvious; the failure mode is silent. One code block fixes it permanently. |
-| 5 | **Hosted block explorer or `debug_traceTransaction`** | Contract debugging without an explorer is painful. Even a minimal tx-hash → receipt + decoded logs page would help significantly. |
-| 6 | **Canonical testnet faucet with a stable URL** | Required for judges replicating demos and for onboarding new team members mid-hackathon. |
-| 7 | **Deployed protocol registry** | One page listing what is and isn't on testnet (Aave, USYC, others) so teams scope integrations correctly. |
-
----
-
-## 5. Summary
-
-Arc's USDC-native architecture is the right bet and we built on it willingly.
-The friction was almost entirely in undocumented sharp edges and missing
-developer tooling — nothing fundamental. Fix the filter persistence, document
-the getLogs cap, open the USYC testnet path, and ship a minimal explorer and
-the Arc developer experience goes from "workable with patience" to "genuinely
-great." We'd build on Arc again.
+The USDC-native design is the right bet, and we leaned into it on purpose. Almost all of
+our friction was undocumented sharp edges and missing tooling, not anything structural.
+Fix the filter persistence, document the getLogs cap, open a USYC testnet path, and ship
+even a bare-bones explorer, and the Arc developer experience goes from "workable if you're
+patient" to genuinely good. We'd build on Arc again.
