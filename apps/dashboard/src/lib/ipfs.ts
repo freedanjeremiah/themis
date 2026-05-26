@@ -11,9 +11,9 @@
  *   - bare `Qm...` (treated as IPFS)
  */
 const GATEWAYS = [
+  "https://gateway.pinata.cloud/ipfs", // content was pinned here — fastest
   "https://ipfs.io/ipfs",
   "https://dweb.link/ipfs",
-  "https://cf-ipfs.com/ipfs",
 ];
 
 export class TraceUnavailableError extends Error {
@@ -34,17 +34,18 @@ export async function fetchTrace(cid: string): Promise<unknown> {
   if (!normalized)
     throw new TraceUnavailableError("not published to IPFS");
 
-  // Sequential with a per-gateway timeout: only fall through to the next
-  // gateway if the current one fails, so a healthy first gateway = one request.
-  for (const gw of GATEWAYS) {
-    try {
-      const resp = await fetch(`${gw}/${normalized}`, {
-        signal: AbortSignal.timeout(7_000),
-      });
-      if (resp.ok) return await resp.json();
-    } catch {
-      /* try next gateway */
-    }
+  // Race all gateways in parallel; first 200 OK wins.
+  const attempts = GATEWAYS.map(async (gw) => {
+    const resp = await fetch(`${gw}/${normalized}`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) throw new Error(`${gw} ${resp.status}`);
+    return resp.json() as Promise<unknown>;
+  });
+
+  try {
+    return await Promise.any(attempts);
+  } catch {
+    throw new TraceUnavailableError(`all ${GATEWAYS.length} gateways failed`);
   }
-  throw new TraceUnavailableError(`all ${GATEWAYS.length} gateways failed`);
 }
